@@ -34,7 +34,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           {
             id: user.id,
             email: user.email ?? null,
-            name: user.user_metadata?.name ?? null,
+            full_name: user.user_metadata?.full_name ?? null,
             phone: user.user_metadata?.phone ?? null,
           },
           { onConflict: 'id', ignoreDuplicates: true }

@@ -18,7 +18,7 @@ const AppContent: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [reminderServiceId, setReminderServiceId] = useState<string | null>(null);
   const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
-  const { t, language, services } = useApp();
+  const { t, language } = useApp();
   const { isAuthenticated, showSplash } = useAuth();
 
   const tabs = [
