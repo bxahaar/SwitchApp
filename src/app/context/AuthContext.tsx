@@ -12,40 +12,68 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Upsert the user profile into the public.users table.
+// Called after SIGNED_IN and on session restore so returning users are updated too.
+async function syncUserProfile(user: User): Promise<void> {
+  const payload = {
+    id: user.id,
+    email: user.email ?? null,
+    full_name: (user.user_metadata?.full_name as string | undefined) ?? null,
+    phone: null, // Google OAuth does not supply a phone number
+  };
+
+  console.log('[Auth] syncing user profile:', payload);
+
+  const { error } = await supabase
+    .from('users')
+    .upsert(payload, { onConflict: 'id' });
+
+  if (error) {
+    console.error(
+      '[Auth] upsert error:',
+      error.message,
+      '| code:', error.code,
+      '| details:', error.details,
+      '| hint:', error.hint,
+    );
+  } else {
+    console.log('[Auth] user profile synced successfully');
+  }
+}
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [showSplash, setShowSplash] = useState(true);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Restore existing session on mount
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
+    // 1. Restore existing session on mount.
+    //    After an OAuth redirect the session lives in the URL hash — Supabase
+    //    picks it up automatically and getSession() returns it.
+    supabase.auth.getSession().then(({ data: { session: s }, error }) => {
+      if (error) console.error('[Auth] getSession error:', error.message);
+      setSession(s);
       setLoading(false);
-    });
-
-    // Listen for auth state changes (handles OAuth callback)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      setSession(session);
-
-      if (event === 'SIGNED_IN' && session?.user) {
-        const { user } = session;
-        await supabase.from('users').upsert(
-          {
-            id: user.id,
-            email: user.email ?? null,
-            full_name: user.user_metadata?.full_name ?? null,
-            phone: user.user_metadata?.phone ?? null,
-          },
-          { onConflict: 'id', ignoreDuplicates: true }
-        );
+      // Sync profile on page-reload if a session is already present.
+      // onAuthStateChange fires INITIAL_SESSION (not SIGNED_IN) on reload,
+      // so we handle the profile sync here explicitly.
+      if (s?.user) {
+        syncUserProfile(s.user);
       }
     });
 
-    // Hide splash after 2.5 seconds
-    const timer = setTimeout(() => {
-      setShowSplash(false);
-    }, 2500);
+    // 2. Subscribe to real-time auth state changes.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
+      console.log('[Auth] event:', event);
+      setSession(s);
+      // SIGNED_IN fires on the first OAuth callback after the Google redirect.
+      if (event === 'SIGNED_IN' && s?.user) {
+        syncUserProfile(s.user);
+      }
+    });
+
+    // 3. Hide splash after 2.5 s.
+    const timer = setTimeout(() => setShowSplash(false), 2500);
 
     return () => {
       subscription.unsubscribe();
@@ -53,17 +81,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
-  const login = async () => {
-    await supabase.auth.signInWithOAuth({
+  const login = async (): Promise<void> => {
+    const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: {
-        redirectTo: window.location.origin,
-      },
+      options: { redirectTo: window.location.origin },
     });
+    if (error) console.error('[Auth] signInWithOAuth error:', error.message);
   };
 
-  const logout = async () => {
-    await supabase.auth.signOut();
+  const logout = async (): Promise<void> => {
+    const { error } = await supabase.auth.signOut();
+    if (error) console.error('[Auth] signOut error:', error.message);
   };
 
   return (
