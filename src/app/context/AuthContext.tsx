@@ -25,8 +25,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     // Listen for auth state changes (handles OAuth callback)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       setSession(session);
+
+      if (event === 'SIGNED_IN' && session?.user) {
+        const { user } = session;
+        await supabase.from('users').upsert(
+          {
+            id: user.id,
+            email: user.email ?? null,
+            name: user.user_metadata?.name ?? null,
+            phone: user.user_metadata?.phone ?? null,
+          },
+          { onConflict: 'id', ignoreDuplicates: true }
+        );
+      }
     });
 
     // Hide splash after 2.5 seconds
