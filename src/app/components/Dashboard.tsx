@@ -24,7 +24,7 @@ interface DashboardProps {
 
 export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, onStartServiceWithReminder, onEditService }) => {
   const { t, cars, services, theme, setTheme, language, setLanguage, deleteService, reminders, deleteReminder } = useApp();
-  const { logout, phoneNumber } = useAuth();
+  const { logout, user } = useAuth();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [privacyOpen, setPrivacyOpen] = useState(false);
   const [openSwipeCardId, setOpenSwipeCardId] = useState<string | null>(null);
@@ -128,13 +128,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, onStartService
                   </div>
                 </div>
                 
-                {/* Phone Number Display */}
-                {phoneNumber && (
+                {/* Account Display */}
+                {user?.email && (
                   <div className="space-y-2 pt-4 border-t border-border/70">
-                    <Label className="text-muted-foreground">{t('phoneNumber')}</Label>
+                    <Label className="text-muted-foreground">{language === 'fa' ? 'حساب کاربری' : 'Account'}</Label>
                     <div className="px-4 py-3 rounded-xl bg-secondary/70 border border-border/70">
                       <p className="text-foreground font-medium" dir="ltr">
-                        {phoneNumber}
+                        {user.email}
                       </p>
                     </div>
                   </div>
@@ -175,8 +175,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, onStartService
                 <div className="pt-4 border-t border-border/70">
                   <Button
                     variant="outline"
-                    onClick={() => {
-                      logout();
+                    onClick={async () => {
+                      await logout();
                       setSettingsOpen(false);
                     }}
                     className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10"

@@ -7,7 +7,6 @@ import { CarManagement } from './components/CarManagement';
 import { EducationInsights } from './components/EducationInsights';
 import { SplashScreen } from './components/SplashScreen';
 import { PhoneLogin } from './components/PhoneLogin';
-import { OTPVerification } from './components/OTPVerification';
 import { LayoutDashboard, Plus, Car, Lightbulb } from 'lucide-react';
 import { Toaster } from './components/ui/sonner';
 import { motion, AnimatePresence } from 'motion/react';
@@ -17,12 +16,10 @@ type Tab = 'dashboard' | 'addService' | 'cars' | 'insights';
 
 const AppContent: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
-  const [authStep, setAuthStep] = useState<'phone' | 'otp'>('phone');
-  const [phoneNumber, setPhoneNumber] = useState('');
   const [reminderServiceId, setReminderServiceId] = useState<string | null>(null);
   const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
   const { t, language, services } = useApp();
-  const { isAuthenticated, login, showSplash } = useAuth();
+  const { isAuthenticated, showSplash } = useAuth();
 
   const tabs = [
     { id: 'dashboard' as Tab, label: t('dashboard'), icon: LayoutDashboard },
@@ -30,19 +27,6 @@ const AppContent: React.FC = () => {
     { id: 'cars' as Tab, label: t('cars'), icon: Car },
     { id: 'insights' as Tab, label: t('insights'), icon: Lightbulb },
   ];
-
-  const handlePhoneContinue = (phone: string) => {
-    setPhoneNumber(phone);
-    setAuthStep('otp');
-  };
-
-  const handleOTPVerify = () => {
-    login(phoneNumber);
-  };
-
-  const handleBackToPhone = () => {
-    setAuthStep('phone');
-  };
 
   const handleStartServiceWithReminder = (serviceId: string) => {
     setReminderServiceId(serviceId);
@@ -74,31 +58,14 @@ const AppContent: React.FC = () => {
   if (!isAuthenticated) {
     return (
       <>
-        <AnimatePresence mode="wait">
-          {authStep === 'phone' ? (
-            <motion.div
-              key="phone"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-            >
-              <PhoneLogin onContinue={handlePhoneContinue} />
-            </motion.div>
-          ) : (
-            <motion.div
-              key="otp"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-            >
-              <OTPVerification
-                phoneNumber={phoneNumber}
-                onVerify={handleOTPVerify}
-                onBack={handleBackToPhone}
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <motion.div
+          key="login"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+        >
+          <PhoneLogin />
+        </motion.div>
         <Toaster />
       </>
     );

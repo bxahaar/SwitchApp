@@ -1,51 +1,68 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import type { Session, User } from '@supabase/supabase-js';
+import { supabase } from '../../lib/supabase';
 
 interface AuthContextType {
   isAuthenticated: boolean;
-  phoneNumber: string | null;
-  login: (phone: string) => void;
-  logout: () => void;
+  user: User | null;
+  login: () => Promise<void>;
+  logout: () => Promise<void>;
   showSplash: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [phoneNumber, setPhoneNumber] = useState<string | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [showSplash, setShowSplash] = useState(true);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check for stored auth
-    const storedAuth = localStorage.getItem('carServiceAuth');
-    if (storedAuth) {
-      const { phone } = JSON.parse(storedAuth);
-      setPhoneNumber(phone);
-      setIsAuthenticated(true);
-    }
+    // Restore existing session on mount
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setLoading(false);
+    });
+
+    // Listen for auth state changes (handles OAuth callback)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
 
     // Hide splash after 2.5 seconds
     const timer = setTimeout(() => {
       setShowSplash(false);
     }, 2500);
 
-    return () => clearTimeout(timer);
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(timer);
+    };
   }, []);
 
-  const login = (phone: string) => {
-    setPhoneNumber(phone);
-    setIsAuthenticated(true);
-    localStorage.setItem('carServiceAuth', JSON.stringify({ phone }));
+  const login = async () => {
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin,
+      },
+    });
   };
 
-  const logout = () => {
-    setPhoneNumber(null);
-    setIsAuthenticated(false);
-    localStorage.removeItem('carServiceAuth');
+  const logout = async () => {
+    await supabase.auth.signOut();
   };
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, phoneNumber, login, logout, showSplash }}>
+    <AuthContext.Provider
+      value={{
+        isAuthenticated: !!session && !loading,
+        user: session?.user ?? null,
+        login,
+        logout,
+        showSplash,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
