@@ -117,90 +117,64 @@ export const AddService: React.FC<AddServiceProps> = ({ onSuccess, reminderServi
     }
   };
 
-  const handleSubmit = () => {
+  const resetForm = () => {
+    setFormData({
+      carId: '', type: 'general',
+      date: new Date().toISOString().split('T')[0],
+      mileage: 0, cost: 0, notes: '',
+      serviceItems: [], nextServiceType: undefined,
+      nextServiceValue: undefined, reminderNote: '',
+    });
+    setStep(1);
+    setMode('completed');
+  };
+
+  const handleSubmit = async () => {
     if (!formData.carId || !formData.type) {
       toast.error('Please fill in all required fields');
       return;
     }
 
-    if (editingServiceId) {
-      updateService(editingServiceId, formData as Omit<Service, 'id'>);
-    } else {
-      addService(formData as Omit<Service, 'id'>);
-    }
-    
-    // Show success animation
-    setShowSuccess(true);
-    
-    // Auto-redirect to dashboard after 1000ms
-    setTimeout(() => {
-      setShowSuccess(false);
-      // Reset form
-      setFormData({
-        carId: '',
-        type: 'general',
-        date: new Date().toISOString().split('T')[0],
-        mileage: 0,
-        cost: 0,
-        notes: '',
-        serviceItems: [],
-        nextServiceType: undefined,
-        nextServiceValue: undefined,
-        reminderNote: '',
-      });
-      setStep(1);
-      
-      // Navigate to dashboard
-      if (onSuccess) {
-        onSuccess();
+    try {
+      if (editingServiceId) {
+        await updateService(editingServiceId, formData as Omit<Service, 'id'>);
+      } else {
+        await addService(formData as Omit<Service, 'id'>);
       }
-    }, 1000);
+      setShowSuccess(true);
+      setTimeout(() => {
+        setShowSuccess(false);
+        resetForm();
+        if (onSuccess) onSuccess();
+      }, 1000);
+    } catch {
+      toast.error('Failed to save service. Please try again.');
+    }
   };
 
-  const handleReminderSubmit = () => {
+  const handleReminderSubmit = async () => {
     if (!formData.carId || !formData.type || !formData.nextServiceType || !formData.nextServiceValue) {
       toast.error('Please fill in all required fields');
       return;
     }
 
-    // Create a reminder object
-    const reminderData = {
-      carId: formData.carId,
-      type: formData.type,
-      reminderType: formData.nextServiceType,
-      reminderValue: formData.nextServiceValue,
-      reminderNote: formData.reminderNote || '',
-    };
-
-    addReminder(reminderData);
-    
-    // Show success animation
-    setShowSuccess(true);
-    
-    // Auto-redirect to dashboard after 1000ms
-    setTimeout(() => {
-      setShowSuccess(false);
-      // Reset form
-      setFormData({
-        carId: '',
-        type: 'general',
-        date: new Date().toISOString().split('T')[0],
-        mileage: 0,
-        cost: 0,
-        notes: '',
-        serviceItems: [],
-        nextServiceType: undefined,
-        nextServiceValue: undefined,
-        reminderNote: '',
+    try {
+      await addReminder({
+        carId: formData.carId!,
+        type: formData.type!,
+        reminderType: formData.nextServiceType!,
+        reminderValue: formData.nextServiceValue!,
+        reminderNote: formData.reminderNote || '',
       });
-      setStep(1);
-      setMode('completed');
-      
-      // Navigate to dashboard
-      if (onSuccess) {
-        onSuccess();
-      }
-    }, 1000);
+      setShowSuccess(true);
+      setTimeout(() => {
+        setShowSuccess(false);
+        resetForm();
+        if (onSuccess) onSuccess();
+      }, 1000);
+    } catch {
+      toast.error('Failed to save reminder. Please try again.');
+    }
   };
 
   return (

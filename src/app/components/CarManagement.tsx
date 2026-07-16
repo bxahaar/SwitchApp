@@ -11,9 +11,11 @@ import { toast } from 'sonner';
 import { Pencil, Trash2, Plus } from 'lucide-react';
 
 export const CarManagement: React.FC = () => {
-  const { t, cars, addCar, updateCar, deleteCar, language } = useApp();
+  console.log('CarManagement rendered');
+  const { t, cars, carsLoading, addCar, updateCar, deleteCar, language } = useApp();
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [editingDatesFor, setEditingDatesFor] = useState<{ carId: string; type: 'insurance' | 'technicalInspection' } | null>(null);
   const [dateFormData, setDateFormData] = useState<{ startDate: string; endDate: string }>({ startDate: '', endDate: '' });
   const [formData, setFormData] = useState<Omit<Car, 'id'>>({
@@ -21,16 +23,24 @@ export const CarManagement: React.FC = () => {
     licensePlate: '',
   });
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (!formData.name || !formData.licensePlate) {
       toast.error('Please fill in all fields');
       return;
     }
 
-    addCar(formData);
-    toast.success('Car added successfully!');
-    setFormData({ name: '', licensePlate: '' });
-    setIsAdding(false);
+    setSaving(true);
+    console.log('[CarManagement] adding car:', formData);
+    try {
+      await addCar(formData);
+      toast.success('Car added successfully!');
+      setFormData({ name: '', licensePlate: '' });
+      setIsAdding(false);
+    } catch {
+      toast.error('Failed to save car. Please try again.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleEdit = (car: Car) => {
@@ -38,22 +48,33 @@ export const CarManagement: React.FC = () => {
     setFormData({ name: car.name, licensePlate: car.licensePlate });
   };
 
-  const handleUpdate = () => {
+  const handleUpdate = async () => {
     if (!formData.name || !formData.licensePlate || !editingId) {
       toast.error('Please fill in all fields');
       return;
     }
 
-    updateCar(editingId, formData);
-    toast.success('Car updated successfully!');
-    setFormData({ name: '', licensePlate: '' });
-    setEditingId(null);
+    setSaving(true);
+    try {
+      await updateCar(editingId, formData);
+      toast.success('Car updated successfully!');
+      setFormData({ name: '', licensePlate: '' });
+      setEditingId(null);
+    } catch {
+      toast.error('Failed to update car. Please try again.');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this car?')) {
-      deleteCar(id);
-      toast.success('Car deleted successfully!');
+      try {
+        await deleteCar(id);
+        toast.success('Car deleted successfully!');
+      } catch {
+        toast.error('Failed to delete car. Please try again.');
+      }
     }
   };
 
@@ -167,15 +188,20 @@ export const CarManagement: React.FC = () => {
                 <Button
                   onClick={isAdding ? handleAdd : handleUpdate}
                   className="flex-1 bg-primary hover:bg-primary/90"
+                  disabled={saving}
                 >
-                  {t('save')}
+                  {saving ? '...' : t('save')}
                 </Button>
               </div>
             </div>
           )}
 
           {/* Car List */}
-          {cars.length > 0 ? (
+          {carsLoading ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <p>{'...'}</p>
+            </div>
+          ) : cars.length > 0 ? (
             <div className="space-y-4">
               {cars.map(car => (
                 <div
@@ -232,6 +258,7 @@ export const CarManagement: React.FC = () => {
               <p>{t('noCars')}</p>
             </div>
           )}
+
         </div>
       </div>
 

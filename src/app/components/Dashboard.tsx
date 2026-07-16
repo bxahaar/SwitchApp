@@ -15,6 +15,7 @@ import { Timeline } from './Timeline';
 import { TimelineItem } from './TimelineItem';
 import { PrivacyPolicy } from './PrivacyPolicy';
 import { motion, AnimatePresence } from 'motion/react';
+import { toast } from 'sonner';
 
 interface DashboardProps {
   onNavigate?: (tab: 'cars' | 'addService') => void;
@@ -248,11 +249,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, onStartService
                           service={item}
                           isOpen={openSwipeCardId === item.id}
                           onOpenChange={(open) => setOpenSwipeCardId(open ? item.id : null)}
-                          onDelete={() => {
-                            if (item.isStandaloneReminder) {
-                              deleteReminder(item.id);
-                            } else {
-                              deleteService(item.id);
+                          onDelete={async () => {
+                            try {
+                              if (item.isStandaloneReminder) {
+                                await deleteReminder(item.id);
+                              } else {
+                                await deleteService(item.id);
+                              }
+                            } catch {
+                              toast.error('Failed to delete. Please try again.');
                             }
                             setOpenSwipeCardId(null);
                           }}

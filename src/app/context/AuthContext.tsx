@@ -1,50 +1,27 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../../lib/supabase';
+import { usersService } from '../../lib/services';
 
 interface AuthContextType {
   isAuthenticated: boolean;
+  isPreviewMode: boolean;
   user: User | null;
   login: () => Promise<void>;
   logout: () => Promise<void>;
   showSplash: boolean;
+  /** Only available in dev mode (`import.meta.env.DEV`). Skips OAuth redirect. */
+  previewLogin?: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-// Upsert the user profile into the public.users table.
-// Called after SIGNED_IN and on session restore so returning users are updated too.
-async function syncUserProfile(user: User): Promise<void> {
-  const payload = {
-    id: user.id,
-    email: user.email ?? null,
-    full_name: (user.user_metadata?.full_name as string | undefined) ?? null,
-    phone: null, // Google OAuth does not supply a phone number
-  };
-
-  console.log('[Auth] syncing user profile:', payload);
-
-  const { error } = await supabase
-    .from('users')
-    .upsert(payload, { onConflict: 'id' });
-
-  if (error) {
-    console.error(
-      '[Auth] upsert error:',
-      error.message,
-      '| code:', error.code,
-      '| details:', error.details,
-      '| hint:', error.hint,
-    );
-  } else {
-    console.log('[Auth] user profile synced successfully');
-  }
-}
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [showSplash, setShowSplash] = useState(true);
   const [loading, setLoading] = useState(true);
+  // Dev-only bypass: lets the preview work without an OAuth redirect.
+  const [previewMode, setPreviewMode] = useState(false);
 
   useEffect(() => {
     // 1. Restore existing session on mount.
@@ -58,7 +35,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // onAuthStateChange fires INITIAL_SESSION (not SIGNED_IN) on reload,
       // so we handle the profile sync here explicitly.
       if (s?.user) {
-        syncUserProfile(s.user);
+        usersService.syncProfile(s.user);
       }
     });
 
@@ -68,7 +45,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setSession(s);
       // SIGNED_IN fires on the first OAuth callback after the Google redirect.
       if (event === 'SIGNED_IN' && s?.user) {
-        syncUserProfile(s.user);
+        usersService.syncProfile(s.user);
       }
     });
 
@@ -90,18 +67,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = async (): Promise<void> => {
+    setPreviewMode(false);
     const { error } = await supabase.auth.signOut();
     if (error) console.error('[Auth] signOut error:', error.message);
   };
 
+  const previewLogin = import.meta.env.DEV
+    ? () => setPreviewMode(true)
+    : undefined;
+
+  const isAuthenticated = previewMode || (!!session && !loading);
+
   return (
     <AuthContext.Provider
       value={{
-        isAuthenticated: !!session && !loading,
+        isAuthenticated,
+        isPreviewMode: previewMode,
         user: session?.user ?? null,
         login,
         logout,
         showSplash,
+        previewLogin,
       }}
     >
       {children}

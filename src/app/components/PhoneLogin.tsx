@@ -30,7 +30,7 @@ const GoogleIcon: React.FC<{ className?: string }> = ({ className }) => (
 
 export const PhoneLogin: React.FC = () => {
   const { language } = useApp();
-  const { login } = useAuth();
+  const { login, previewLogin } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [privacyOpen, setPrivacyOpen] = useState(false);
   const isRTL = language === 'fa';
@@ -110,6 +110,23 @@ export const PhoneLogin: React.FC = () => {
             )}
           </motion.button>
         </motion.div>
+
+        {/* Dev-only preview bypass */}
+        {previewLogin && (
+          <motion.div
+            className="mt-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.5 }}
+          >
+            <button
+              onClick={previewLogin}
+              className="w-full py-3 px-6 rounded-[var(--radius)] border border-dashed border-border text-muted-foreground text-sm hover:text-foreground hover:border-primary/50 transition-colors"
+            >
+              {isRTL ? '⚡ پیش‌نمایش بدون ورود' : '⚡ Preview without login'}
+            </button>
+          </motion.div>
+        )}
 
         {/* Footer */}
         <motion.div
