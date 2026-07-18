@@ -1,5 +1,4 @@
 // Domain types shared across the Supabase service layer and the React contexts.
-// These describe the *application* shape of each entity, not the raw DB row.
 
 export type ServiceType =
   | 'engine'
@@ -13,8 +12,9 @@ export interface Car {
   id: string;
   name: string;
   licensePlate: string;
-  // Insurance / inspection dates have no column in the current DB schema and no
-  // dedicated table exists. They are held in memory only. See services/cars.ts.
+  // Insurance / inspection dates: held in memory only.
+  // These are written via insurance_histories / inspection_histories tables.
+  // The "active" record's dates are cached here for fast display.
   insuranceStartDate?: string;
   insuranceEndDate?: string;
   technicalInspectionStartDate?: string;

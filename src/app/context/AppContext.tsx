@@ -1,17 +1,22 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
 import {
   carsService,
   servicesService,
   remindersService,
+  inspectionHistoriesService,
+  insuranceHistoriesService,
   type Car,
   type Service,
   type Reminder,
+  type InspectionHistory,
+  type InsuranceHistory,
 } from '../../lib/services';
 import { useAuth } from './AuthContext';
 
-// Re-export the domain types so existing component imports keep working.
+// Re-export domain types so existing component imports keep working.
 export type { Car, Service, Reminder } from '../../lib/services';
+export type { InspectionHistory, InsuranceHistory } from '../../lib/services';
 
 export type Language = 'en' | 'fa';
 export type Theme = 'light' | 'dark';
@@ -37,6 +42,16 @@ interface AppContextType {
   reminders: Reminder[];
   addReminder: (reminder: Omit<Reminder, 'id'>) => Promise<void>;
   deleteReminder: (id: string) => Promise<void>;
+  // Inspection histories
+  inspectionHistories: InspectionHistory[];
+  addInspectionHistory: (record: Omit<InspectionHistory, 'id' | 'createdAt'>) => Promise<void>;
+  updateInspectionHistory: (id: string, record: Partial<Omit<InspectionHistory, 'id' | 'carId' | 'createdAt'>>) => Promise<void>;
+  deleteInspectionHistory: (id: string) => Promise<void>;
+  // Insurance histories
+  insuranceHistories: InsuranceHistory[];
+  addInsuranceHistory: (record: Omit<InsuranceHistory, 'id' | 'createdAt'>) => Promise<void>;
+  updateInsuranceHistory: (id: string, record: Partial<Omit<InsuranceHistory, 'id' | 'carId' | 'createdAt'>>) => Promise<void>;
+  deleteInsuranceHistory: (id: string) => Promise<void>;
   t: (key: string) => string;
 }
 
@@ -131,25 +146,23 @@ const translations = {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-// Insurance / inspection dates have no column or table in the current DB schema,
-// so they cannot be persisted to Supabase without a schema change (which this
-// environment cannot apply). They are kept in memory per session and re-merged
-// onto freshly loaded car rows. This is the only non-persisted field group.
-type CarExtras = Pick<
-  Car,
-  'insuranceStartDate' | 'insuranceEndDate' | 'technicalInspectionStartDate' | 'technicalInspectionEndDate'
->;
-function extractExtras(car: Car): CarExtras {
-  const { insuranceStartDate, insuranceEndDate, technicalInspectionStartDate, technicalInspectionEndDate } = car;
-  return { insuranceStartDate, insuranceEndDate, technicalInspectionStartDate, technicalInspectionEndDate };
-}
-function hasExtras(extras: CarExtras): boolean {
-  return Object.values(extras).some((v) => v !== undefined);
-}
-
 // Tiny id generator for in-memory preview records.
 function previewId() {
   return `preview-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+// Session-only insurance/inspection date fields on Car have no DB column.
+// They are re-merged onto freshly loaded car rows to survive re-fetches.
+type CarDateExtras = Pick<
+  Car,
+  'insuranceStartDate' | 'insuranceEndDate' | 'technicalInspectionStartDate' | 'technicalInspectionEndDate'
+>;
+function extractDateExtras(car: Car): CarDateExtras {
+  const { insuranceStartDate, insuranceEndDate, technicalInspectionStartDate, technicalInspectionEndDate } = car;
+  return { insuranceStartDate, insuranceEndDate, technicalInspectionStartDate, technicalInspectionEndDate };
+}
+function hasDateExtras(e: CarDateExtras): boolean {
+  return Object.values(e).some((v) => v !== undefined);
 }
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -160,68 +173,79 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [cars, setCars] = useState<Car[]>([]);
   const [carsLoading, setCarsLoading] = useState(true);
-
   const [services, setServices] = useState<Service[]>([]);
   const [servicesLoading, setServicesLoading] = useState(true);
-
   const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [inspectionHistories, setInspectionHistories] = useState<InspectionHistory[]>([]);
+  const [insuranceHistories, setInsuranceHistories] = useState<InsuranceHistory[]>([]);
 
-  // ── Load helpers (skipped in preview mode) ──────────────────────────────────
+  // Stable ref to current car IDs so mutations don't capture stale closures.
+  const carIdsRef = useRef<string[]>([]);
+
+  // ── Load helpers ─────────────────────────────────────────────────────────────
 
   const loadCars = useCallback(async (): Promise<string[]> => {
     if (isPreviewMode) {
       setCarsLoading(false);
-      return cars.map((c) => c.id);
+      return carIdsRef.current;
     }
     try {
       const loaded = await carsService.list();
-      // Re-apply the session-only insurance/inspection dates onto the fresh rows.
+      // Re-apply session-only date extras onto freshly loaded rows.
       setCars((prev) => {
-        const extrasById = new Map<string, CarExtras>();
+        const extrasById = new Map<string, CarDateExtras>();
         for (const c of prev) {
-          const extras = extractExtras(c);
-          if (hasExtras(extras)) extrasById.set(c.id, extras);
+          const extras = extractDateExtras(c);
+          if (hasDateExtras(extras)) extrasById.set(c.id, extras);
         }
         return loaded.map((c) => ({ ...c, ...(extrasById.get(c.id) ?? {}) }));
       });
-      return loaded.map((c) => c.id);
+      const ids = loaded.map((c) => c.id);
+      carIdsRef.current = ids;
+      return ids;
     } catch {
       setCars([]);
+      carIdsRef.current = [];
       return [];
     } finally {
       setCarsLoading(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPreviewMode]);
 
   const loadServicesAndReminders = useCallback(async (carIds: string[]) => {
-    if (isPreviewMode) {
-      setServicesLoading(false);
-      return;
-    }
+    if (isPreviewMode) { setServicesLoading(false); return; }
     try {
-      const [loadedServices, loadedReminders] = await Promise.all([
+      const [svc, rem] = await Promise.all([
         servicesService.listByCars(carIds),
         remindersService.listByCars(carIds),
       ]);
-      setServices(loadedServices);
-      setReminders(loadedReminders);
-    } catch {
-      // individual services already log details; keep whatever loaded
-    } finally {
+      setServices(svc);
+      setReminders(rem);
+    } catch { /* errors logged inside service */ } finally {
       setServicesLoading(false);
     }
+  }, [isPreviewMode]);
+
+  const loadHistories = useCallback(async (carIds: string[]) => {
+    if (isPreviewMode || carIds.length === 0) return;
+    try {
+      const inspectionResults = await Promise.all(carIds.map((id) => inspectionHistoriesService.listByCar(id)));
+      const insuranceResults = await Promise.all(carIds.map((id) => insuranceHistoriesService.listByCar(id)));
+      setInspectionHistories(inspectionResults.flat());
+      setInsuranceHistories(insuranceResults.flat());
+    } catch { /* errors logged inside services */ }
   }, [isPreviewMode]);
 
   const loadAll = useCallback(async () => {
     setCarsLoading(true);
     setServicesLoading(true);
     const carIds = await loadCars();
-    await loadServicesAndReminders(carIds);
-  }, [loadCars, loadServicesAndReminders]);
+    await Promise.all([
+      loadServicesAndReminders(carIds),
+      loadHistories(carIds),
+    ]);
+  }, [loadCars, loadServicesAndReminders, loadHistories]);
 
-  // On mount: if preview mode, just clear loading flags immediately.
-  // Otherwise wire up the real Supabase auth listener.
   useEffect(() => {
     if (isPreviewMode) {
       setCarsLoading(false);
@@ -252,7 +276,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const addCar = async (car: Omit<Car, 'id'>): Promise<void> => {
     if (isPreviewMode) {
-      setCars((prev) => [...prev, { ...car, id: previewId() }]);
+      const id = previewId();
+      setCars((prev) => [...prev, { ...car, id }]);
+      carIdsRef.current = [...carIdsRef.current, id];
       return;
     }
     await carsService.create(car);
@@ -265,12 +291,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
     const wrote = await carsService.update(id, changes);
-    if (wrote) {
-      await loadCars();
-    }
-    // Merge session-only fields (insurance/inspection dates) either way.
-    const sessionOnly = extractExtras(changes as Car);
-    if (hasExtras(sessionOnly)) {
+    if (wrote) await loadCars();
+    // Always merge session-only date fields even without a DB write.
+    const extras = extractDateExtras(changes as Car);
+    if (hasDateExtras(extras)) {
       setCars((prev) => prev.map((c) => (c.id === id ? { ...c, ...changes } : c)));
     }
   };
@@ -280,6 +304,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setCars((prev) => prev.filter((c) => c.id !== id));
       setServices((prev) => prev.filter((s) => s.carId !== id));
       setReminders((prev) => prev.filter((r) => r.carId !== id));
+      setInspectionHistories((prev) => prev.filter((h) => h.carId !== id));
+      setInsuranceHistories((prev) => prev.filter((h) => h.carId !== id));
+      carIdsRef.current = carIdsRef.current.filter((cid) => cid !== id);
       return;
     }
     await carsService.remove(id);
@@ -294,7 +321,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
     await servicesService.create(service);
-    await loadServicesAndReminders(cars.map((c) => c.id));
+    await loadServicesAndReminders(carIdsRef.current);
   };
 
   const updateService = async (id: string, service: Omit<Service, 'id'>): Promise<void> => {
@@ -303,7 +330,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
     await servicesService.update(id, service);
-    await loadServicesAndReminders(cars.map((c) => c.id));
+    await loadServicesAndReminders(carIdsRef.current);
   };
 
   const deleteService = async (id: string): Promise<void> => {
@@ -312,7 +339,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
     await servicesService.remove(id);
-    await loadServicesAndReminders(cars.map((c) => c.id));
+    await loadServicesAndReminders(carIdsRef.current);
   };
 
   // ── Reminders ─────────────────────────────────────────────────────────────────
@@ -323,7 +350,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
     await remindersService.create(reminder);
-    await loadServicesAndReminders(cars.map((c) => c.id));
+    await loadServicesAndReminders(carIdsRef.current);
   };
 
   const deleteReminder = async (id: string): Promise<void> => {
@@ -332,7 +359,71 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
     await remindersService.remove(id);
-    await loadServicesAndReminders(cars.map((c) => c.id));
+    await loadServicesAndReminders(carIdsRef.current);
+  };
+
+  // ── Inspection histories ──────────────────────────────────────────────────────
+
+  const addInspectionHistory = async (record: Omit<InspectionHistory, 'id' | 'createdAt'>): Promise<void> => {
+    if (isPreviewMode) {
+      setInspectionHistories((prev) => [{ ...record, id: previewId(), createdAt: new Date().toISOString() }, ...prev]);
+      return;
+    }
+    await inspectionHistoriesService.create(record);
+    await loadHistories(carIdsRef.current);
+  };
+
+  const updateInspectionHistory = async (
+    id: string,
+    record: Partial<Omit<InspectionHistory, 'id' | 'carId' | 'createdAt'>>,
+  ): Promise<void> => {
+    if (isPreviewMode) {
+      setInspectionHistories((prev) => prev.map((h) => (h.id === id ? { ...h, ...record } : h)));
+      return;
+    }
+    await inspectionHistoriesService.update(id, record);
+    await loadHistories(carIdsRef.current);
+  };
+
+  const deleteInspectionHistory = async (id: string): Promise<void> => {
+    if (isPreviewMode) {
+      setInspectionHistories((prev) => prev.filter((h) => h.id !== id));
+      return;
+    }
+    await inspectionHistoriesService.remove(id);
+    await loadHistories(carIdsRef.current);
+  };
+
+  // ── Insurance histories ────────────────────────────────────────────────────────
+
+  const addInsuranceHistory = async (record: Omit<InsuranceHistory, 'id' | 'createdAt'>): Promise<void> => {
+    if (isPreviewMode) {
+      setInsuranceHistories((prev) => [{ ...record, id: previewId(), createdAt: new Date().toISOString() }, ...prev]);
+      return;
+    }
+    await insuranceHistoriesService.create(record);
+    await loadHistories(carIdsRef.current);
+  };
+
+  const updateInsuranceHistory = async (
+    id: string,
+    record: Partial<Omit<InsuranceHistory, 'id' | 'carId' | 'createdAt'>>,
+  ): Promise<void> => {
+    if (isPreviewMode) {
+      setInsuranceHistories((prev) => prev.map((h) => (h.id === id ? { ...h, ...record } : h)));
+      return;
+    }
+    await insuranceHistoriesService.update(id, record);
+    await loadHistories(carIdsRef.current);
+  };
+
+  const deleteInsuranceHistory = async (id: string): Promise<void> => {
+    if (isPreviewMode) {
+      setInsuranceHistories((prev) => prev.filter((h) => h.id !== id));
+      return;
+    }
+    await insuranceHistoriesService.remove(id);
+    await loadHistories(carIdsRef.current);
   };
 
   // ── i18n ──────────────────────────────────────────────────────────────────────
@@ -348,6 +439,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         cars, carsLoading, addCar, updateCar, deleteCar,
         services, servicesLoading, addService, updateService, deleteService,
         reminders, addReminder, deleteReminder,
+        inspectionHistories, addInspectionHistory, updateInspectionHistory, deleteInspectionHistory,
+        insuranceHistories, addInsuranceHistory, updateInsuranceHistory, deleteInsuranceHistory,
         t,
       }}
     >
