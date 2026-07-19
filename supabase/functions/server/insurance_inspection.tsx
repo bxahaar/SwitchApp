@@ -4,382 +4,559 @@
 import { Context } from "npm:hono";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 
+
+
 // ============================================================================
-// INSURANCE ENDPOINTS
+// TYPES
 // ============================================================================
 
-// Get insurance records for a car
-export const getInsuranceRecords = async (c: Context, supabase: SupabaseClient, userId: string) => {
+export interface InsuranceHistoryInput {
+  fromDate: string;
+  toDate: string;
+}
+
+export interface ExpiryStatus {
+  daysUntilExpiry: number;
+  isExpired: boolean;
+  isExpiringSoon: boolean;
+}
+
+// ============================================================================
+// HELPERS
+// ============================================================================
+
+export const verifyCarOwnership = async (
+  supabase: SupabaseClient,
+  carId: string,
+  userId: string
+) => {
+  const { data, error } = await supabase
+    .from("cars")
+    .select("id")
+    .eq("id", carId)
+    .eq("user_id", userId)
+    .single();
+
+  if (error || !data) {
+    return null;
+  }
+
+  return data;
+};
+
+export const calculateExpiry = (
+  toDate: string
+): ExpiryStatus => {
+  const today = new Date();
+
+  const expiry = new Date(toDate);
+
+  const daysUntilExpiry = Math.ceil(
+    (expiry.getTime() - today.getTime()) /
+      (1000 * 60 * 60 * 24)
+  );
+
+  return {
+    daysUntilExpiry,
+    isExpired: daysUntilExpiry < 0,
+    isExpiringSoon:
+      daysUntilExpiry >= 0 &&
+      daysUntilExpiry <= 30,
+  };
+};
+
+export const errorResponse = (
+  c: Context,
+  status: number,
+  message: string
+) => {
+  return c.json(
+    {
+      success: false,
+      error: message,
+    },
+    status
+  );
+};
+
+export const successResponse = (
+  c: Context,
+  data: unknown,
+  status = 200
+) => {
+  return c.json(
+    {
+      success: true,
+      ...data,
+    },
+    status
+  );
+};
+
+
+
+//GET INSURANCE HISTORY
+
+export const getInsuranceHistory = async (
+  c: Context,
+  supabase: SupabaseClient,
+  userId: string
+) => {
   try {
-    const carId = c.req.param('carId');
-    const current = c.req.query('current') === 'true';
-    
-    // Verify car ownership
-    const { data: car } = await supabase
-      .from('cars')
-      .select('id')
-      .eq('id', carId)
-      .eq('user_id', userId)
-      .single();
-    
+    const carId = c.req.param("carId");
+
+    const car = await verifyCarOwnership(
+      supabase,
+      carId,
+      userId
+    );
+
     if (!car) {
-      return c.json({ success: false, error: 'Car not found' }, 404);
+      return errorResponse(c, 404, "Car not found");
     }
-    
-    let query = supabase
-      .from('insurance_records')
-      .select('*')
-      .eq('car_id', carId)
-      .order('start_date', { ascending: false });
-    
-    if (current) {
-      query = query.eq('is_current', true);
-    }
-    
-    const { data: records, error } = await query;
-    
+
+    const { data, error } = await supabase
+      .from("insurance_histories")
+      .select("*")
+      .eq("car_id", carId)
+      .order("to_date", { ascending: false });
+
     if (error) {
-      console.error('Error fetching insurance records:', error);
-      return c.json({ success: false, error: 'Failed to fetch insurance records' }, 500);
+      console.error(error);
+
+      return errorResponse(
+        c,
+        500,
+        "Failed to fetch insurance history"
+      );
     }
-    
-    // Add days until expiry calculation
-    const recordsWithCalculations = (records || []).map(record => {
-      const daysUntilExpiry = Math.ceil((new Date(record.end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-      return {
+
+    const records =
+      data?.map(record => ({
         ...record,
-        daysUntilExpiry,
-        isExpiringSoon: daysUntilExpiry <= 30 && daysUntilExpiry > 0,
-      };
+        ...calculateExpiry(record.to_date),
+      })) ?? [];
+
+    return successResponse(c, {
+      records,
     });
-    
-    return c.json({ records: recordsWithCalculations });
+
   } catch (error) {
-    console.error('Error in get insurance records endpoint:', error);
-    return c.json({ success: false, error: 'Internal server error' }, 500);
+    console.error(error);
+
+    return errorResponse(
+      c,
+      500,
+      "Internal server error"
+    );
   }
 };
 
-// Create insurance record
-export const createInsuranceRecord = async (c: Context, supabase: SupabaseClient, userId: string) => {
+//CREATE INSURANCE HISTORY
+
+export const createInsuranceHistory = async (
+  c: Context,
+  supabase: SupabaseClient,
+  userId: string
+) => {
   try {
-    const carId = c.req.param('carId');
-    const insuranceData = await c.req.json();
-    
-    // Verify car ownership
-    const { data: car } = await supabase
-      .from('cars')
-      .select('id')
-      .eq('id', carId)
-      .eq('user_id', userId)
-      .single();
-    
+    const carId = c.req.param("carId");
+
+    const car = await verifyCarOwnership(
+      supabase,
+      carId,
+      userId
+    );
+
     if (!car) {
-      return c.json({ success: false, error: 'Car not found' }, 404);
+      return errorResponse(c, 404, "Car not found");
     }
-    
-    // Validate required fields
-    if (!insuranceData.startDate || !insuranceData.endDate) {
-      return c.json({ success: false, error: 'Start date and end date are required' }, 400);
-    }
-    
-    // If this is current, mark others as not current
-    if (insuranceData.isCurrent) {
-      await supabase
-        .from('insurance_records')
-        .update({ is_current: false, updated_at: new Date().toISOString() })
-        .eq('car_id', carId);
-    }
-    
-    const { data: insurance, error } = await supabase
-      .from('insurance_records')
+
+    const body: InsuranceHistoryInput =
+      await c.req.json();
+
+    const { data, error } = await supabase
+      .from("insurance_histories")
       .insert({
         car_id: carId,
-        user_id: userId,
-        insurance_type: insuranceData.insuranceType,
-        insurance_company: insuranceData.insuranceCompany,
-        policy_number: insuranceData.policyNumber,
-        start_date: insuranceData.startDate,
-        end_date: insuranceData.endDate,
-        premium_amount: insuranceData.premiumAmount,
-        currency: insuranceData.currency || 'toman',
-        document_url: insuranceData.documentUrl,
-        is_current: insuranceData.isCurrent !== false,
-        notes: insuranceData.notes,
+        from_date: body.fromDate,
+        to_date: body.toDate,
       })
       .select()
       .single();
-    
+
     if (error) {
-      console.error('Error creating insurance record:', error);
-      return c.json({ success: false, error: 'Failed to create insurance record' }, 500);
+      console.error(error);
+
+      return errorResponse(
+        c,
+        500,
+        "Failed to create insurance history"
+      );
     }
-    
-    return c.json({ success: true, insurance });
+
+    return successResponse(
+      c,
+      {
+        insurance: data,
+      },
+      201
+    );
+
   } catch (error) {
-    console.error('Error in create insurance record endpoint:', error);
-    return c.json({ success: false, error: 'Internal server error' }, 500);
+    console.error(error);
+
+    return errorResponse(
+      c,
+      500,
+      "Internal server error"
+    );
   }
 };
 
-// Update insurance record
-export const updateInsuranceRecord = async (c: Context, supabase: SupabaseClient, userId: string) => {
+//UPDATE INSURANCE HISTORY
+
+export const updateInsuranceHistory = async (
+  c: Context,
+  supabase: SupabaseClient,
+  userId: string
+) => {
   try {
-    const carId = c.req.param('carId');
-    const insuranceId = c.req.param('insuranceId');
-    const updates = await c.req.json();
-    
-    // If marking as current, unmark others
-    if (updates.isCurrent === true) {
-      await supabase
-        .from('insurance_records')
-        .update({ is_current: false, updated_at: new Date().toISOString() })
-        .eq('car_id', carId)
-        .neq('id', insuranceId);
+    const carId = c.req.param("carId");
+    const insuranceId = c.req.param("insuranceId");
+
+    const car = await verifyCarOwnership(
+      supabase,
+      carId,
+      userId
+    );
+
+    if (!car) {
+      return errorResponse(c, 404, "Car not found");
     }
-    
-    const { data: insurance, error } = await supabase
-      .from('insurance_records')
+
+    const body: InsuranceHistoryInput =
+      await c.req.json();
+
+    const { data, error } = await supabase
+      .from("insurance_histories")
       .update({
-        insurance_type: updates.insuranceType,
-        insurance_company: updates.insuranceCompany,
-        policy_number: updates.policyNumber,
-        start_date: updates.startDate,
-        end_date: updates.endDate,
-        premium_amount: updates.premiumAmount,
-        currency: updates.currency,
-        document_url: updates.documentUrl,
-        is_current: updates.isCurrent,
-        notes: updates.notes,
+        from_date: body.fromDate,
+        to_date: body.toDate,
         updated_at: new Date().toISOString(),
       })
-      .eq('id', insuranceId)
-      .eq('car_id', carId)
-      .eq('user_id', userId)
+      .eq("id", insuranceId)
+      .eq("car_id", carId)
       .select()
       .single();
-    
-    if (error) {
-      console.error('Error updating insurance record:', error);
-      return c.json({ success: false, error: 'Failed to update insurance record' }, 500);
-    }
-    
-    return c.json({ success: true, insurance });
-  } catch (error) {
-    console.error('Error in update insurance record endpoint:', error);
-    return c.json({ success: false, error: 'Internal server error' }, 500);
-  }
-};
 
-// Delete insurance record
-export const deleteInsuranceRecord = async (c: Context, supabase: SupabaseClient, userId: string) => {
-  try {
-    const carId = c.req.param('carId');
-    const insuranceId = c.req.param('insuranceId');
-    
-    const { error } = await supabase
-      .from('insurance_records')
-      .delete()
-      .eq('id', insuranceId)
-      .eq('car_id', carId)
-      .eq('user_id', userId);
-    
     if (error) {
-      console.error('Error deleting insurance record:', error);
-      return c.json({ success: false, error: 'Failed to delete insurance record' }, 500);
-    }
-    
-    return c.json({ success: true, message: 'Insurance record deleted successfully' });
-  } catch (error) {
-    console.error('Error in delete insurance record endpoint:', error);
-    return c.json({ success: false, error: 'Internal server error' }, 500);
-  }
-};
+      console.error(error);
 
-// ============================================================================
-// TECHNICAL INSPECTION ENDPOINTS
-// ============================================================================
+      return errorResponse(
+        c,
+        500,
+        "Failed to update insurance history"
+      );
+    }
 
-// Get technical inspection records for a car
-export const getInspectionRecords = async (c: Context, supabase: SupabaseClient, userId: string) => {
-  try {
-    const carId = c.req.param('carId');
-    const current = c.req.query('current') === 'true';
-    
-    // Verify car ownership
-    const { data: car } = await supabase
-      .from('cars')
-      .select('id')
-      .eq('id', carId)
-      .eq('user_id', userId)
-      .single();
-    
-    if (!car) {
-      return c.json({ success: false, error: 'Car not found' }, 404);
-    }
-    
-    let query = supabase
-      .from('technical_inspection_records')
-      .select('*')
-      .eq('car_id', carId)
-      .order('inspection_date', { ascending: false });
-    
-    if (current) {
-      query = query.eq('is_current', true);
-    }
-    
-    const { data: records, error } = await query;
-    
-    if (error) {
-      console.error('Error fetching inspection records:', error);
-      return c.json({ success: false, error: 'Failed to fetch inspection records' }, 500);
-    }
-    
-    // Add days until expiry calculation
-    const recordsWithCalculations = (records || []).map(record => {
-      const daysUntilExpiry = Math.ceil((new Date(record.expiry_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-      return {
-        ...record,
-        daysUntilExpiry,
-        isExpiringSoon: daysUntilExpiry <= 30 && daysUntilExpiry > 0,
-      };
+    return successResponse(c, {
+      insurance: data,
     });
-    
-    return c.json({ records: recordsWithCalculations });
+
   } catch (error) {
-    console.error('Error in get inspection records endpoint:', error);
-    return c.json({ success: false, error: 'Internal server error' }, 500);
+    console.error(error);
+
+    return errorResponse(
+      c,
+      500,
+      "Internal server error"
+    );
   }
 };
 
-// Create technical inspection record
-export const createInspectionRecord = async (c: Context, supabase: SupabaseClient, userId: string) => {
+//DELETE INSURANCE HISTORY
+
+export const deleteInsuranceHistory = async (
+  c: Context,
+  supabase: SupabaseClient,
+  userId: string
+) => {
   try {
-    const carId = c.req.param('carId');
-    const inspectionData = await c.req.json();
-    
-    // Verify car ownership
-    const { data: car } = await supabase
-      .from('cars')
-      .select('id')
-      .eq('id', carId)
-      .eq('user_id', userId)
-      .single();
-    
+    const carId = c.req.param("carId");
+    const insuranceId = c.req.param("insuranceId");
+
+    const car = await verifyCarOwnership(
+      supabase,
+      carId,
+      userId
+    );
+
     if (!car) {
-      return c.json({ success: false, error: 'Car not found' }, 404);
+      return errorResponse(c, 404, "Car not found");
     }
-    
-    // Validate required fields
-    if (!inspectionData.inspectionDate || !inspectionData.expiryDate) {
-      return c.json({ success: false, error: 'Inspection date and expiry date are required' }, 400);
+
+    const { error } = await supabase
+      .from("insurance_histories")
+      .delete()
+      .eq("id", insuranceId)
+      .eq("car_id", carId);
+
+    if (error) {
+      console.error(error);
+
+      return errorResponse(
+        c,
+        500,
+        "Failed to delete insurance history"
+      );
     }
-    
-    // If this is current, mark others as not current
-    if (inspectionData.isCurrent) {
-      await supabase
-        .from('technical_inspection_records')
-        .update({ is_current: false, updated_at: new Date().toISOString() })
-        .eq('car_id', carId);
+
+    return successResponse(c, {
+      message: "Insurance history deleted successfully",
+    });
+
+  } catch (error) {
+    console.error(error);
+
+    return errorResponse(
+      c,
+      500,
+      "Internal server error"
+    );
+  }
+};
+
+
+//GET INSPECTION HISTORY
+
+
+export const getInspectionHistory = async (
+  c: Context,
+  supabase: SupabaseClient,
+  userId: string
+) => {
+  try {
+    const carId = c.req.param("carId");
+
+    const car = await verifyCarOwnership(
+      supabase,
+      carId,
+      userId
+    );
+
+    if (!car) {
+      return errorResponse(c, 404, "Car not found");
     }
-    
-    const { data: inspection, error } = await supabase
-      .from('technical_inspection_records')
+
+    const { data, error } = await supabase
+      .from("inspection_histories")
+      .select("*")
+      .eq("car_id", carId)
+      .order("to_date", { ascending: false });
+
+    if (error) {
+      console.error(error);
+
+      return errorResponse(
+        c,
+        500,
+        "Failed to fetch inspection history"
+      );
+    }
+
+    const records =
+      data?.map(record => ({
+        ...record,
+        ...calculateExpiry(record.to_date),
+      })) ?? [];
+
+    return successResponse(c, {
+      records,
+    });
+
+  } catch (error) {
+    console.error(error);
+
+    return errorResponse(
+      c,
+      500,
+      "Internal server error"
+    );
+  }
+};
+
+//CREATE INSPECTION HISTORY
+
+export const createInspectionHistory = async (
+  c: Context,
+  supabase: SupabaseClient,
+  userId: string
+) => {
+  try {
+    const carId = c.req.param("carId");
+
+    const car = await verifyCarOwnership(
+      supabase,
+      carId,
+      userId
+    );
+
+    if (!car) {
+      return errorResponse(c, 404, "Car not found");
+    }
+
+    const body: InsuranceHistoryInput =
+      await c.req.json();
+
+    const { data, error } = await supabase
+      .from("inspection_histories")
       .insert({
         car_id: carId,
-        user_id: userId,
-        inspection_center: inspectionData.inspectionCenter,
-        certificate_number: inspectionData.certificateNumber,
-        inspection_date: inspectionData.inspectionDate,
-        expiry_date: inspectionData.expiryDate,
-        passed: inspectionData.passed !== false,
-        notes: inspectionData.notes,
-        document_url: inspectionData.documentUrl,
-        is_current: inspectionData.isCurrent !== false,
+        from_date: body.fromDate,
+        to_date: body.toDate,
       })
       .select()
       .single();
-    
+
     if (error) {
-      console.error('Error creating inspection record:', error);
-      return c.json({ success: false, error: 'Failed to create inspection record' }, 500);
+      console.error(error);
+
+      return errorResponse(
+        c,
+        500,
+        "Failed to create inspection history"
+      );
     }
-    
-    return c.json({ success: true, inspection });
+
+    return successResponse(
+      c,
+      {
+        inspection: data,
+      },
+      201
+    );
+
   } catch (error) {
-    console.error('Error in create inspection record endpoint:', error);
-    return c.json({ success: false, error: 'Internal server error' }, 500);
+    console.error(error);
+
+    return errorResponse(
+      c,
+      500,
+      "Internal server error"
+    );
   }
 };
 
-// Update technical inspection record
-export const updateInspectionRecord = async (c: Context, supabase: SupabaseClient, userId: string) => {
+//UPDATE INSPECTION HISTORY
+
+export const updateInspectionHistory = async (
+  c: Context,
+  supabase: SupabaseClient,
+  userId: string
+) => {
   try {
-    const carId = c.req.param('carId');
-    const inspectionId = c.req.param('inspectionId');
-    const updates = await c.req.json();
-    
-    // If marking as current, unmark others
-    if (updates.isCurrent === true) {
-      await supabase
-        .from('technical_inspection_records')
-        .update({ is_current: false, updated_at: new Date().toISOString() })
-        .eq('car_id', carId)
-        .neq('id', inspectionId);
+    const carId = c.req.param("carId");
+    const inspectionId = c.req.param("inspectionId");
+
+    const car = await verifyCarOwnership(
+      supabase,
+      carId,
+      userId
+    );
+
+    if (!car) {
+      return errorResponse(c, 404, "Car not found");
     }
-    
-    const { data: inspection, error } = await supabase
-      .from('technical_inspection_records')
+
+    const body: InsuranceHistoryInput =
+      await c.req.json();
+
+    const { data, error } = await supabase
+      .from("inspection_histories")
       .update({
-        inspection_center: updates.inspectionCenter,
-        certificate_number: updates.certificateNumber,
-        inspection_date: updates.inspectionDate,
-        expiry_date: updates.expiryDate,
-        passed: updates.passed,
-        notes: updates.notes,
-        document_url: updates.documentUrl,
-        is_current: updates.isCurrent,
+        from_date: body.fromDate,
+        to_date: body.toDate,
         updated_at: new Date().toISOString(),
       })
-      .eq('id', inspectionId)
-      .eq('car_id', carId)
-      .eq('user_id', userId)
+      .eq("id", inspectionId)
+      .eq("car_id", carId)
       .select()
       .single();
-    
+
     if (error) {
-      console.error('Error updating inspection record:', error);
-      return c.json({ success: false, error: 'Failed to update inspection record' }, 500);
+      console.error(error);
+
+      return errorResponse(
+        c,
+        500,
+        "Failed to update inspection history"
+      );
     }
-    
-    return c.json({ success: true, inspection });
+
+    return successResponse(c, {
+      inspection: data,
+    });
+
   } catch (error) {
-    console.error('Error in update inspection record endpoint:', error);
-    return c.json({ success: false, error: 'Internal server error' }, 500);
+    console.error(error);
+
+    return errorResponse(
+      c,
+      500,
+      "Internal server error"
+    );
   }
 };
 
-// Delete technical inspection record
-export const deleteInspectionRecord = async (c: Context, supabase: SupabaseClient, userId: string) => {
+//DELETE INSPECTION HISTORY
+
+export const deleteInspectionHistory = async (
+  c: Context,
+  supabase: SupabaseClient,
+  userId: string
+) => {
   try {
-    const carId = c.req.param('carId');
-    const inspectionId = c.req.param('inspectionId');
-    
-    const { error } = await supabase
-      .from('technical_inspection_records')
-      .delete()
-      .eq('id', inspectionId)
-      .eq('car_id', carId)
-      .eq('user_id', userId);
-    
-    if (error) {
-      console.error('Error deleting inspection record:', error);
-      return c.json({ success: false, error: 'Failed to delete inspection record' }, 500);
+    const carId = c.req.param("carId");
+    const inspectionId = c.req.param("inspectionId");
+
+    const car = await verifyCarOwnership(
+      supabase,
+      carId,
+      userId
+    );
+
+    if (!car) {
+      return errorResponse(c, 404, "Car not found");
     }
-    
-    return c.json({ success: true, message: 'Inspection record deleted successfully' });
+
+    const { error } = await supabase
+      .from("inspection_histories")
+      .delete()
+      .eq("id", inspectionId)
+      .eq("car_id", carId);
+
+    if (error) {
+      console.error(error);
+
+      return errorResponse(
+        c,
+        500,
+        "Failed to delete inspection history"
+      );
+    }
+
+    return successResponse(c, {
+      message: "Inspection history deleted successfully",
+    });
+
   } catch (error) {
-    console.error('Error in delete inspection record endpoint:', error);
-    return c.json({ success: false, error: 'Internal server error' }, 500);
+    console.error(error);
+
+    return errorResponse(
+      c,
+      500,
+      "Internal server error"
+    );
   }
 };

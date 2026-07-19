@@ -154,19 +154,15 @@ const AppContent: React.FC = () => {
                 {/* using <button> instead of kit Button: bottom navigation items need native tab semantics and custom vertical label/icon layout not provided by Astra Button */}
                 <button
                   onClick={() => setActiveTab(tab.id)}
-                  className={`relative flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl px-2 py-2 transition-all duration-200 active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2 ${
-                    isActive
-                      ? 'text-primary bg-primary/10'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-secondary/80'
-                  }`}
+                  className={`relative flex min-h-14 flex-col items-center justify-center gap-1 transition-all duration-200 active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2 ${ isActive ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-foreground hover:bg-secondary/80' } p-[8px] m-[0px] rounded-[20px]`}
                 >
                   <div className={`relative ${isActive ? 'scale-110' : ''} transition-transform`}>
-                    <Icon size={22} strokeWidth={1.8} />
+                    <Icon className="mx-[0px] my-[4px]" size={22} strokeWidth={1.8} />
                     {isActive && (
-                      <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 h-1 w-5 rounded-full bg-primary" />
+                      <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 h-1 w-5 rounded-full bg-primary m-[0px] p-[0px]" />
                     )}
                   </div>
-                  <span className="text-xs">{tab.label}</span>
+                  <span className="text-xs px-[0px] py-[4px]">{tab.label}</span>
                 </button>
                 </React.Fragment>
               );

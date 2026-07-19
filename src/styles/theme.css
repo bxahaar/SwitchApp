@@ -130,7 +130,8 @@
 @layer base {
   * { @apply border-border outline-ring/50; }
   html { font-size: var(--font-size); }
-  body { @apply bg-background text-foreground antialiased; }
+  body { @apply bg-background text-foreground antialiased;
+       font-family: 'Vazirmatn', sans-serif;}
   .scrollbar-hide::-webkit-scrollbar { display: none; }
   .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
   .safe-area-bottom { padding-bottom: env(safe-area-inset-bottom); }

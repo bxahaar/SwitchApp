@@ -13,6 +13,7 @@ import {
   type InsuranceHistory,
 } from '../../lib/services';
 import { useAuth } from './AuthContext';
+import { addInsuranceWorkflow, addInspectionWorkflow } from '../../lib/workflows';
 
 // Re-export domain types so existing component imports keep working.
 export type { Car, Service, Reminder } from '../../lib/services';
@@ -151,19 +152,6 @@ function previewId() {
   return `preview-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-// Session-only insurance/inspection date fields on Car have no DB column.
-// They are re-merged onto freshly loaded car rows to survive re-fetches.
-type CarDateExtras = Pick<
-  Car,
-  'insuranceStartDate' | 'insuranceEndDate' | 'technicalInspectionStartDate' | 'technicalInspectionEndDate'
->;
-function extractDateExtras(car: Car): CarDateExtras {
-  const { insuranceStartDate, insuranceEndDate, technicalInspectionStartDate, technicalInspectionEndDate } = car;
-  return { insuranceStartDate, insuranceEndDate, technicalInspectionStartDate, technicalInspectionEndDate };
-}
-function hasDateExtras(e: CarDateExtras): boolean {
-  return Object.values(e).some((v) => v !== undefined);
-}
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isPreviewMode } = useAuth();
@@ -191,15 +179,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     try {
       const loaded = await carsService.list();
-      // Re-apply session-only date extras onto freshly loaded rows.
-      setCars((prev) => {
-        const extrasById = new Map<string, CarDateExtras>();
-        for (const c of prev) {
-          const extras = extractDateExtras(c);
-          if (hasDateExtras(extras)) extrasById.set(c.id, extras);
-        }
-        return loaded.map((c) => ({ ...c, ...(extrasById.get(c.id) ?? {}) }));
-      });
+      setCars(loaded);
       const ids = loaded.map((c) => c.id);
       carIdsRef.current = ids;
       return ids;
@@ -229,10 +209,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const loadHistories = useCallback(async (carIds: string[]) => {
     if (isPreviewMode || carIds.length === 0) return;
     try {
-      const inspectionResults = await Promise.all(carIds.map((id) => inspectionHistoriesService.listByCar(id)));
-      const insuranceResults = await Promise.all(carIds.map((id) => insuranceHistoriesService.listByCar(id)));
-      setInspectionHistories(inspectionResults.flat());
-      setInsuranceHistories(insuranceResults.flat());
+      const [inspectionResults, insuranceResults] = await Promise.all([
+        Promise.all(carIds.map((id) => inspectionHistoriesService.listByCar(id))),
+        Promise.all(carIds.map((id) => insuranceHistoriesService.listByCar(id))),
+      ]);
+      const allInspections = inspectionResults.flat();
+      const allInsurances = insuranceResults.flat();
+      setInspectionHistories(allInspections);
+      setInsuranceHistories(allInsurances);
+
+      // Merge the most recent history record's dates onto each car so that
+      // car.insuranceStartDate / car.technicalInspectionStartDate etc. survive page refreshes.
+      setCars((prev) =>
+        prev.map((car) => {
+          const latestInsurance = allInsurances
+            .filter((h) => h.carId === car.id)
+            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+          const latestInspection = allInspections
+            .filter((h) => h.carId === car.id)
+            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+          return {
+            ...car,
+            ...(latestInsurance
+              ? { insuranceStartDate: latestInsurance.startDate ?? undefined, insuranceEndDate: latestInsurance.endDate ?? undefined }
+              : {}),
+            ...(latestInspection
+              ? { technicalInspectionStartDate: latestInspection.startDate ?? undefined, technicalInspectionEndDate: latestInspection.endDate ?? undefined }
+              : {}),
+          };
+        })
+      );
     } catch { /* errors logged inside services */ }
   }, [isPreviewMode]);
 
@@ -290,13 +296,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setCars((prev) => prev.map((c) => (c.id === id ? { ...c, ...changes } : c)));
       return;
     }
+
+    const hasInsuranceDates =
+      changes.insuranceStartDate !== undefined || changes.insuranceEndDate !== undefined;
+    const hasInspectionDates =
+      changes.technicalInspectionStartDate !== undefined || changes.technicalInspectionEndDate !== undefined;
+
+    if (hasInsuranceDates) {
+      const current = cars.find((c) => c.id === id);
+      const startDate = changes.insuranceStartDate ?? current?.insuranceStartDate ?? '';
+      const endDate = changes.insuranceEndDate ?? current?.insuranceEndDate ?? '';
+      await addInsuranceWorkflow({ carId: id, startDate: startDate || '', endDate: endDate || '' });
+    }
+
+    if (hasInspectionDates) {
+      const current = cars.find((c) => c.id === id);
+      const startDate = changes.technicalInspectionStartDate ?? current?.technicalInspectionStartDate ?? '';
+      const endDate = changes.technicalInspectionEndDate ?? current?.technicalInspectionEndDate ?? '';
+      await addInspectionWorkflow({ carId: id, startDate: startDate || '', endDate: endDate || '' });
+    }
+
+    if (hasInsuranceDates || hasInspectionDates) {
+      // Reload histories so the merged dates on car state are re-derived from DB.
+      await loadHistories(carIdsRef.current);
+      // If there are no other car-metadata changes, return early.
+      const metadataKeys = Object.keys(changes).filter(
+        (k) => !['insuranceStartDate', 'insuranceEndDate', 'technicalInspectionStartDate', 'technicalInspectionEndDate'].includes(k)
+      );
+      if (metadataKeys.length === 0) return;
+    }
+
     const wrote = await carsService.update(id, changes);
     if (wrote) await loadCars();
-    // Always merge session-only date fields even without a DB write.
-    const extras = extractDateExtras(changes as Car);
-    if (hasDateExtras(extras)) {
-      setCars((prev) => prev.map((c) => (c.id === id ? { ...c, ...changes } : c)));
-    }
   };
 
   const deleteCar = async (id: string): Promise<void> => {

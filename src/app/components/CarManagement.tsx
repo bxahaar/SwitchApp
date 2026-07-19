@@ -103,7 +103,7 @@ export const CarManagement: React.FC = () => {
     setEditingDatesFor({ carId, type });
   };
 
-  const handleSaveDates = () => {
+  const handleSaveDates = async () => {
     if (!editingDatesFor) return;
 
     const { carId, type } = editingDatesFor;
@@ -113,21 +113,27 @@ export const CarManagement: React.FC = () => {
       return;
     }
 
-    if (type === 'insurance') {
-      updateCar(carId, {
-        insuranceStartDate: dateFormData.startDate,
-        insuranceEndDate: dateFormData.endDate,
-      });
-    } else {
-      updateCar(carId, {
-        technicalInspectionStartDate: dateFormData.startDate,
-        technicalInspectionEndDate: dateFormData.endDate,
-      });
+    setSaving(true);
+    try {
+      if (type === 'insurance') {
+        await updateCar(carId, {
+          insuranceStartDate: dateFormData.startDate,
+          insuranceEndDate: dateFormData.endDate,
+        });
+      } else {
+        await updateCar(carId, {
+          technicalInspectionStartDate: dateFormData.startDate,
+          technicalInspectionEndDate: dateFormData.endDate,
+        });
+      }
+      toast.success(t('savedSuccessfully') || 'Saved successfully!');
+      setEditingDatesFor(null);
+      setDateFormData({ startDate: '', endDate: '' });
+    } catch {
+      toast.error('Failed to save. Please try again.');
+    } finally {
+      setSaving(false);
     }
-
-    toast.success(t('savedSuccessfully') || 'Saved successfully!');
-    setEditingDatesFor(null);
-    setDateFormData({ startDate: '', endDate: '' });
   };
 
   return (
@@ -306,8 +312,9 @@ export const CarManagement: React.FC = () => {
               <Button
                 onClick={handleSaveDates}
                 className="flex-1 bg-primary hover:bg-primary/90"
+                disabled={saving}
               >
-                {t('save')}
+                {saving ? '...' : t('save')}
               </Button>
             </div>
           </div>
