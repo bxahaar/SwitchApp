@@ -19,10 +19,6 @@ export interface AddInsuranceInput {
   carId: string;
   startDate: string;
   endDate: string;
-  provider?: string | null;
-  policyNumber?: string | null;
-  cost?: number | null;
-  notes?: string | null;
 }
 
 export interface AddInsuranceResult {
@@ -38,8 +34,7 @@ export async function addInsuranceWorkflow(input: AddInsuranceInput): Promise<Ad
     .from('insurance_histories')
     .select('id')
     .eq('car_id', input.carId)
-    .eq('status', 'active')
-    .limit(10);
+  
 
   if (active && active.length > 0) {
     for (const row of active) {
@@ -55,13 +50,8 @@ export async function addInsuranceWorkflow(input: AddInsuranceInput): Promise<Ad
   // Step 2: Insert the new policy
   await insuranceHistoriesService.create({
     carId: input.carId,
-    startDate: input.startDate,
-    endDate: input.endDate,
-    status: 'active',
-    provider: input.provider ?? null,
-    policyNumber: input.policyNumber ?? null,
-    cost: input.cost ?? null,
-    notes: input.notes ?? null,
+    fromDate: input.startDate,
+    toDate: input.endDate,
   });
 
   // Step 3: Return the new record id by fetching the latest for this car

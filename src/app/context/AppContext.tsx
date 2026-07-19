@@ -299,13 +299,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const hasInsuranceDates =
       changes.insuranceStartDate !== undefined || changes.insuranceEndDate !== undefined;
+      console.log("booloot has insurance date", hasInsuranceDates)
     const hasInspectionDates =
       changes.technicalInspectionStartDate !== undefined || changes.technicalInspectionEndDate !== undefined;
 
     if (hasInsuranceDates) {
       const current = cars.find((c) => c.id === id);
       const startDate = changes.insuranceStartDate ?? current?.insuranceStartDate ?? '';
+      console.log("booloot start date", startDate)
       const endDate = changes.insuranceEndDate ?? current?.insuranceEndDate ?? '';
+      console.log("booloot end date", endDate)
       await addInsuranceWorkflow({ carId: id, startDate: startDate || '', endDate: endDate || '' });
     }
 

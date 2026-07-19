@@ -116,8 +116,6 @@ export const CarManagement: React.FC = () => {
     setSaving(true);
     try {
       if (type === 'insurance') {
-        console.log("bolooooot start date", dateFormData.startDate)
-        console.log("bolooooot end date", dateFormData.endDate)
         await updateCar(carId, {
           insuranceStartDate: dateFormData.startDate,
           insuranceEndDate: dateFormData.endDate,
