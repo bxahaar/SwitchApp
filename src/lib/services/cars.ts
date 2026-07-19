@@ -55,6 +55,7 @@ export const carsService = {
    */
   async update(id: string, changes: Partial<Car>): Promise<boolean> {
     const payload: Record<string, unknown> = {};
+    console.log('boloooooooot payload',payload)
     if (changes.name !== undefined) payload.name = changes.name;
     if (changes.licensePlate !== undefined) payload.plate = changes.licensePlate;
 
