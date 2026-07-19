@@ -5,41 +5,29 @@ import { supabase } from '../supabase';
 export interface InsuranceHistory {
   id: string;
   carId: string;
-  startDate: string | null;
-  endDate: string | null;
-  status: 'active' | 'expired' | 'pending' | null;
-  provider: string | null;
-  policyNumber: string | null;
-  notes: string | null;
-  cost: number | null;
+  fromDate: string | null;
+  toDate: string | null;
   createdAt: string;
+  updatedAt: string;
 }
 
 type InsuranceRow = {
   id: string;
   car_id: string;
-  start_date: string | null;
-  end_date: string | null;
-  status: string | null;
-  provider: string | null;
-  policy_number: string | null;
-  notes: string | null;
-  cost: number | null;
+  from_date: string | null;
+  to_date: string | null;
   created_at: string;
+  updated_at: string;
 };
 
 function rowToInsurance(row: InsuranceRow): InsuranceHistory {
   return {
     id: row.id,
     carId: row.car_id,
-    startDate: row.start_date,
-    endDate: row.end_date,
-    status: row.status as InsuranceHistory['status'],
-    provider: row.provider,
-    policyNumber: row.policy_number,
-    notes: row.notes,
-    cost: row.cost,
+    fromDate: row.from_date,
+    toDate: row.to_date,
     createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 
@@ -47,7 +35,7 @@ export const insuranceHistoriesService = {
   async listByCar(carId: string): Promise<InsuranceHistory[]> {
     const { data, error } = await supabase
       .from('insurance_histories')
-      .select('id, car_id, start_date, end_date, status, provider, policy_number, notes, cost, created_at')
+      .select('id, car_id, from_date, to_date, created_at, updated_at')
       .eq('car_id', carId)
       .order('created_at', { ascending: false });
 
@@ -61,13 +49,8 @@ export const insuranceHistoriesService = {
   async create(record: Omit<InsuranceHistory, 'id' | 'createdAt'>): Promise<void> {
     const { error } = await supabase.from('insurance_histories').insert({
       car_id: record.carId,
-      start_date: record.startDate,
-      end_date: record.endDate,
-      status: record.status,
-      provider: record.provider,
-      policy_number: record.policyNumber,
-      notes: record.notes,
-      cost: record.cost,
+      from_date: record.fromDate,
+      to_date: record.toDate
     });
     if (error) {
       console.error('[insuranceHistories.create] error:', error.message, '| code:', error.code);
@@ -77,13 +60,8 @@ export const insuranceHistoriesService = {
 
   async update(id: string, record: Partial<Omit<InsuranceHistory, 'id' | 'carId' | 'createdAt'>>): Promise<void> {
     const payload: Record<string, unknown> = {};
-    if (record.startDate !== undefined) payload.start_date = record.startDate;
-    if (record.endDate !== undefined) payload.end_date = record.endDate;
-    if (record.status !== undefined) payload.status = record.status;
-    if (record.provider !== undefined) payload.provider = record.provider;
-    if (record.policyNumber !== undefined) payload.policy_number = record.policyNumber;
-    if (record.notes !== undefined) payload.notes = record.notes;
-    if (record.cost !== undefined) payload.cost = record.cost;
+    if (record.fromDate !== undefined) payload.start_date = record.fromDate;
+    if (record.toDate !== undefined) payload.end_date = record.toDate;
 
     if (Object.keys(payload).length === 0) return;
     const { error } = await supabase.from('insurance_histories').update(payload).eq('id', id);
