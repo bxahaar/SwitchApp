@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useApp, Service } from '../context/AppContext';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { ChevronLeft, CircleCheck, Check, Plus } from 'lucide-react';
 import { DatePickerInput } from './ui/date-picker';
 import { motion, AnimatePresence } from 'motion/react';
+import { itemsService, type Item, typeToCategory } from '../../lib/services';
 
 interface AddServiceProps {
   onSuccess?: () => void;
@@ -16,21 +17,13 @@ interface AddServiceProps {
   editingServiceId?: string | null;
 }
 
-// Predefined service items for each service type
-const serviceItemsMap: Record<Service['type'], string[]> = {
-  engine: ['engineOil', 'oilFilter', 'airFilter', 'cabinFilter'],
-  brakes: ['brakePads'],
-  gearbox: ['gearboxOil', 'gearboxFilter'],
-  battery: ['batteryReplacement'],
-  tires: ['tirePressure'],
-  general: ['coolant', 'acGas', 'washerFluid', 'suspension', 'timingBelt', 'exhaust', 'powerSteeringFluid'],
-};
-
 export const AddService: React.FC<AddServiceProps> = ({ onSuccess, reminderServiceId, editingServiceId }) => {
   const { t, cars, addService, updateService, addReminder, language, services } = useApp();
   const [step, setStep] = useState(1);
   const [showSuccess, setShowSuccess] = useState(false);
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  const [categoryItems, setCategoryItems] = useState<Item[]>([]);
+  const [itemsLoading, setItemsLoading] = useState(false);
   const [customItem, setCustomItem] = useState('');
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [mode, setMode] = useState<'completed' | 'reminder'>('completed');
@@ -48,6 +41,27 @@ export const AddService: React.FC<AddServiceProps> = ({ onSuccess, reminderServi
   }));
 
   const serviceTypes: Service['type'][] = ['engine', 'gearbox', 'brakes', 'tires', 'battery', 'general'];
+
+  const selectedParentId = useMemo(() => typeToCategory(formData.type || 'general'), [formData.type]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadItems = async () => {
+      setItemsLoading(true);
+      try {
+        const items = await itemsService.listChildren(selectedParentId);
+        if (!cancelled) setCategoryItems(items);
+      } catch {
+        if (!cancelled) setCategoryItems([]);
+        toast.error('Failed to load service items. Please try again.');
+      } finally {
+        if (!cancelled) setItemsLoading(false);
+      }
+    };
+    loadItems();
+    return () => { cancelled = true; };
+  }, [selectedParentId]);
+
 
   // Pre-fill data from reminder service
   useEffect(() => {
@@ -98,10 +112,12 @@ export const AddService: React.FC<AddServiceProps> = ({ onSuccess, reminderServi
 
   // Reset selected items when service type changes
   useEffect(() => {
-    setSelectedItems([]);
+    if (!editingServiceId) {
+      setSelectedItems([]);
+    }
     setShowCustomInput(false);
     setCustomItem('');
-  }, [formData.type]);
+  }, [formData.type, editingServiceId]);
 
   const toggleItem = (item: string) => {
     setSelectedItems(prev => 
@@ -109,11 +125,24 @@ export const AddService: React.FC<AddServiceProps> = ({ onSuccess, reminderServi
     );
   };
 
-  const addCustomServiceItem = () => {
-    if (customItem.trim()) {
-      setSelectedItems(prev => [...prev, customItem.trim()]);
+  const addCustomServiceItem = async () => {
+    const name = customItem.trim();
+    if (!name) return;
+    const existing = categoryItems.find((item) => item.name.toLocaleLowerCase() === name.toLocaleLowerCase());
+    if (existing) {
+      setSelectedItems(prev => prev.includes(existing.id) ? prev : [...prev, existing.id]);
       setCustomItem('');
       setShowCustomInput(false);
+      return;
+    }
+    try {
+      const createdItem = await itemsService.create({ name, nameFa: null, parentId: selectedParentId });
+      setCategoryItems(prev => [...prev, createdItem]);
+      setSelectedItems(prev => prev.includes(createdItem.id) ? prev : [...prev, createdItem.id]);
+      setCustomItem('');
+      setShowCustomInput(false);
+    } catch {
+      toast.error('Failed to create custom item. Please try again.');
     }
   };
 
@@ -137,9 +166,9 @@ export const AddService: React.FC<AddServiceProps> = ({ onSuccess, reminderServi
 
     try {
       if (editingServiceId) {
-        await updateService(editingServiceId, formData as Omit<Service, 'id'>);
+        await updateService(editingServiceId, { ...formData, serviceItems: Array.from(new Set(selectedItems)) } as Omit<Service, 'id'>);
       } else {
-        await addService(formData as Omit<Service, 'id'>);
+        await addService({ ...formData, serviceItems: Array.from(new Set(selectedItems)) } as Omit<Service, 'id'>);
       }
       setShowSuccess(true);
       setTimeout(() => {
@@ -401,12 +430,17 @@ export const AddService: React.FC<AddServiceProps> = ({ onSuccess, reminderServi
 
               {/* Predefined Items */}
               <div className="space-y-2">
-                {serviceItemsMap[formData.type || 'general'].map((item) => {
-                  const isSelected = selectedItems.includes(item);
+                {itemsLoading && (
+                  <div className="p-4 rounded-xl bg-secondary text-sm text-muted-foreground">
+                    {language === 'fa' ? 'در حال بارگذاری...' : 'Loading service items...'}
+                  </div>
+                )}
+                {categoryItems.map((item) => {
+                  const isSelected = selectedItems.includes(item.id);
                   return (
                     <button
-                      key={item}
-                      onClick={() => toggleItem(item)}
+                      key={item.id}
+                      onClick={() => toggleItem(item.id)}
                       className={`w-full flex items-center gap-3 p-4 rounded-xl border transition-all ${
                         isSelected
                           ? 'bg-primary/10 border-primary text-foreground'
@@ -418,24 +452,11 @@ export const AddService: React.FC<AddServiceProps> = ({ onSuccess, reminderServi
                       }`}>
                         {isSelected && <Check className="h-3 w-3 text-primary-foreground" strokeWidth={3} />}
                       </div>
-                      <span className="flex-1 text-start">{t(item)}</span>
+                      <span className="flex-1 text-start">{language === 'fa' ? (item.nameFa || item.name) : item.name}</span>
                     </button>
                   );
                 })}
                 
-                {/* Custom Items Display */}
-                {selectedItems.filter(item => !serviceItemsMap[formData.type || 'general'].includes(item)).map((customItemText) => (
-                  <button
-                    key={customItemText}
-                    onClick={() => toggleItem(customItemText)}
-                    className="w-full flex items-center gap-3 p-4 rounded-xl border transition-all bg-primary/10 border-primary text-foreground"
-                  >
-                    <div className="h-5 w-5 rounded-lg border-2 flex items-center justify-center transition-colors bg-primary border-primary">
-                      <Check className="h-3 w-3 text-primary-foreground" strokeWidth={3} />
-                    </div>
-                    <span className="flex-1 text-start">{customItemText}</span>
-                  </button>
-                ))}
               </div>
 
               {/* Add Custom Item */}
@@ -485,6 +506,7 @@ export const AddService: React.FC<AddServiceProps> = ({ onSuccess, reminderServi
               <div className="flex gap-3">
                 <Button
                   onClick={() => {
+                    setSelectedItems([]);
                     setFormData({ ...formData, serviceItems: [] });
                     setStep(4);
                   }}

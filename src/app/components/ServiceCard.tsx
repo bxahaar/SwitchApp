@@ -45,7 +45,7 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({ service, onEdit }) => 
                         key={index}
                         className="inline-flex items-center px-2 py-0.5 rounded-lg bg-primary/10 text-primary text-xs"
                       >
-                        {t(item) !== item ? t(item) : item}
+                        {service.serviceItemLabels?.[item] ?? (t(item) !== item ? t(item) : item)}
                       </span>
                     ))}
                   </div>
