@@ -12,7 +12,17 @@ import { Pencil, Trash2, Plus } from 'lucide-react';
 
 export const CarManagement: React.FC = () => {
   console.log('CarManagement rendered');
-  const { t, cars, carsLoading, addCar, updateCar, deleteCar, language } = useApp();
+  const { 
+  t,
+  cars,
+  carsLoading,
+  addCar,
+  updateCar,
+  deleteCar,
+  language,
+  insuranceHistories,
+  inspectionHistories
+  } = useApp();
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -209,7 +219,15 @@ export const CarManagement: React.FC = () => {
             </div>
           ) : cars.length > 0 ? (
             <div className="space-y-4">
-              {cars.map(car => (
+              {cars.map(car => {
+              const insurance = insuranceHistories.find(
+                (item) => item.carId === car.id
+              );
+            
+              const inspection = inspectionHistories.find(
+                (item) => item.carId === car.id
+              );
+              return(
                 <div
                   key={car.id}
                   className="rounded-xl bg-card border border-border/70 p-4 space-y-4"
@@ -257,17 +275,16 @@ export const CarManagement: React.FC = () => {
                     onEdit={() => handleOpenDateEditor(car.id, 'technicalInspection')}
                   />
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-12 text-muted-foreground">
-              <p>{t('noCars')}</p>
-            </div>
-          )}
-
-        </div>
-      </div>
-
+              );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-12 text-muted-foreground">
+                <p>{t('noCars')}</p>
+              </div>
+            )}
+          </div>  {/* بستن max-w-md */}
+        </div>    {/* بستن Content */}
       {/* Date Edit Sheet */}
       <Sheet open={editingDatesFor !== null} onOpenChange={(open) => !open && setEditingDatesFor(null)}>
         <SheetContent side="bottom" className="h-auto p-4">
