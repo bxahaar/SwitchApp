@@ -45,13 +45,13 @@ interface AppContextType {
   deleteReminder: (id: string) => Promise<void>;
   // Inspection histories
   inspectionHistories: InspectionHistory[];
-  addInspectionHistory: (record: Omit<InspectionHistory, 'id' | 'createdAt'>) => Promise<void>;
-  updateInspectionHistory: (id: string, record: Partial<Omit<InspectionHistory, 'id' | 'carId' | 'createdAt'>>) => Promise<void>;
+  addInspectionHistory: (record: Omit<InspectionHistory, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+  updateInspectionHistory: (id: string, record: Partial<Omit<InspectionHistory, 'id' | 'carId' | 'createdAt' | 'updatedAt'>>) => Promise<void>;
   deleteInspectionHistory: (id: string) => Promise<void>;
   // Insurance histories
   insuranceHistories: InsuranceHistory[];
-  addInsuranceHistory: (record: Omit<InsuranceHistory, 'id' | 'createdAt'>) => Promise<void>;
-  updateInsuranceHistory: (id: string, record: Partial<Omit<InsuranceHistory, 'id' | 'carId' | 'createdAt'>>) => Promise<void>;
+  addInsuranceHistory: (record: Omit<InsuranceHistory, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+  updateInsuranceHistory: (id: string, record: Partial<Omit<InsuranceHistory, 'id' | 'carId' | 'createdAt' | 'updatedAt'>>) => Promise<void>;
   deleteInsuranceHistory: (id: string) => Promise<void>;
   t: (key: string) => string;
 }
@@ -224,10 +224,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         prev.map((car) => {
           const latestInsurance = allInsurances
             .filter((h) => h.carId === car.id)
-            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+            .sort((a, b) => new Date(b.endDate ?? '').getTime() - new Date(a.endDate ?? '').getTime())[0];
           const latestInspection = allInspections
             .filter((h) => h.carId === car.id)
-            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+            .sort((a, b) => new Date(b.endDate ?? '').getTime() - new Date(a.endDate ?? '').getTime())[0];
           return {
             ...car,
             ...(latestInsurance
@@ -299,16 +299,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const hasInsuranceDates =
       changes.insuranceStartDate !== undefined || changes.insuranceEndDate !== undefined;
-      console.log("booloot has insurance date", hasInsuranceDates)
     const hasInspectionDates =
       changes.technicalInspectionStartDate !== undefined || changes.technicalInspectionEndDate !== undefined;
 
     if (hasInsuranceDates) {
       const current = cars.find((c) => c.id === id);
       const startDate = changes.insuranceStartDate ?? current?.insuranceStartDate ?? '';
-      console.log("booloot start date", startDate)
       const endDate = changes.insuranceEndDate ?? current?.insuranceEndDate ?? '';
-      console.log("booloot end date", endDate)
       await addInsuranceWorkflow({ carId: id, startDate: startDate || '', endDate: endDate || '' });
     }
 
@@ -398,9 +395,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // ── Inspection histories ──────────────────────────────────────────────────────
 
-  const addInspectionHistory = async (record: Omit<InspectionHistory, 'id' | 'createdAt'>): Promise<void> => {
+  const addInspectionHistory = async (record: Omit<InspectionHistory, 'id' | 'createdAt' | 'updatedAt'>): Promise<void> => {
     if (isPreviewMode) {
-      setInspectionHistories((prev) => [{ ...record, id: previewId(), createdAt: new Date().toISOString() }, ...prev]);
+      setInspectionHistories((prev) => [{ ...record, id: previewId(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }, ...prev]);
       return;
     }
     await inspectionHistoriesService.create(record);
@@ -409,7 +406,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateInspectionHistory = async (
     id: string,
-    record: Partial<Omit<InspectionHistory, 'id' | 'carId' | 'createdAt'>>,
+    record: Partial<Omit<InspectionHistory, 'id' | 'carId' | 'createdAt' | 'updatedAt'>>,
   ): Promise<void> => {
     if (isPreviewMode) {
       setInspectionHistories((prev) => prev.map((h) => (h.id === id ? { ...h, ...record } : h)));
@@ -430,9 +427,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // ── Insurance histories ────────────────────────────────────────────────────────
 
-  const addInsuranceHistory = async (record: Omit<InsuranceHistory, 'id' | 'createdAt'>): Promise<void> => {
+  const addInsuranceHistory = async (record: Omit<InsuranceHistory, 'id' | 'createdAt' | 'updatedAt'>): Promise<void> => {
     if (isPreviewMode) {
-      setInsuranceHistories((prev) => [{ ...record, id: previewId(), createdAt: new Date().toISOString() }, ...prev]);
+      setInsuranceHistories((prev) => [{ ...record, id: previewId(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }, ...prev]);
       return;
     }
     await insuranceHistoriesService.create(record);
@@ -441,7 +438,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateInsuranceHistory = async (
     id: string,
-    record: Partial<Omit<InsuranceHistory, 'id' | 'carId' | 'createdAt'>>,
+    record: Partial<Omit<InsuranceHistory, 'id' | 'carId' | 'createdAt' | 'updatedAt'>>,
   ): Promise<void> => {
     if (isPreviewMode) {
       setInsuranceHistories((prev) => prev.map((h) => (h.id === id ? { ...h, ...record } : h)));

@@ -1,7 +1,7 @@
 import { supabase } from '../supabase';
 
-// public.insurance_histories columns (after migration):
-// id, car_id, start_date, end_date, status, notes, provider, policy_number, cost, created_at, updated_at
+// public.insurance_histories columns:
+// id, car_id, start_date, end_date, created_at, updated_at
 export interface InsuranceHistory {
   id: string;
   carId: string;
@@ -37,7 +37,7 @@ export const insuranceHistoriesService = {
       .from('insurance_histories')
       .select('id, car_id, start_date, end_date, created_at, updated_at')
       .eq('car_id', carId)
-      .order('created_at', { ascending: false });
+      .order('end_date', { ascending: false, nullsFirst: false });
 
     if (error) {
       console.error('[insuranceHistories.listByCar] error:', error.message, '| code:', error.code);
@@ -58,7 +58,7 @@ export const insuranceHistoriesService = {
     }
   },
 
-  async update(id: string, record: Partial<Omit<InsuranceHistory, 'id' | 'carId' | 'createdAt'>>): Promise<void> {
+  async update(id: string, record: Partial<Omit<InsuranceHistory, 'id' | 'carId' | 'createdAt' | 'updatedAt'>>): Promise<void> {
     const payload: Record<string, unknown> = {};
     if (record.startDate !== undefined) payload.start_date = record.startDate;
     if (record.endDate !== undefined) payload.end_date = record.endDate;
