@@ -231,7 +231,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return {
             ...car,
             ...(latestInsurance
-              ? { insuranceStartDate: latestInsurance.startDate ?? undefined, insuranceEndDate: latestInsurance.endDate ?? undefined }
+              ? { insuranceStartDate: latestInsurance.fromDate ?? undefined, insuranceEndDate: latestInsurance.toDate ?? undefined }
               : {}),
             ...(latestInspection
               ? { technicalInspectionStartDate: latestInspection.startDate ?? undefined, technicalInspectionEndDate: latestInspection.endDate ?? undefined }

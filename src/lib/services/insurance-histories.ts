@@ -24,8 +24,8 @@ function rowToInsurance(row: InsuranceRow): InsuranceHistory {
   return {
     id: row.id,
     carId: row.car_id,
-    fromDate: row.from_date,
-    toDate: row.to_date,
+    startDate: row.from_date,
+    endDate: row.to_date,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
