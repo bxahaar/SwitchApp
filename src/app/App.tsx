@@ -25,7 +25,7 @@ const AppContent: React.FC = () => {
     { id: 'dashboard' as Tab, label: t('dashboard'), icon: LayoutDashboard },
     { id: 'addService' as Tab, label: t('addService'), icon: Plus },
     { id: 'cars' as Tab, label: t('cars'), icon: Car },
-    { id: 'insights' as Tab, label: t('insights'), icon: Lightbulb },
+   // { id: 'insights' as Tab, label: t('insights'), icon: Lightbulb },
   ];
 
   const handleStartServiceWithReminder = (serviceId: string) => {
@@ -144,7 +144,7 @@ const AppContent: React.FC = () => {
 
         {/* Bottom Navigation */}
         <div className="sticky bottom-0 z-20 bg-card/92 backdrop-blur-xl border-t border-border/70">
-          <div className="grid grid-cols-4 items-center gap-1 px-2 pt-2 pb-2 safe-area-bottom">
+          <div className="grid grid-cols-3 items-center gap-1 px-2 pt-2 pb-2 safe-area-bottom">
             {tabs.map(tab => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
