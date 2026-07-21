@@ -16,8 +16,6 @@ import { carsService } from '../services/cars';
 import { insuranceHistoriesService } from '../services/insurance-histories';
 import { inspectionHistoriesService } from '../services/inspection-histories';
 import type { Car } from '../services/types';
-import type { InsuranceHistory } from '../services/insurance-histories';
-import type { InspectionHistory } from '../services/inspection-histories';
 
 export interface AddCarInput {
   /** Required car fields */
@@ -27,13 +25,13 @@ export interface AddCarInput {
    * Optional: record the car's current insurance policy.
    * Omit entirely if the user skips this step.
    */
-  insurance?: Pick<InsuranceHistory, 'startDate' | 'endDate' | 'provider' | 'policyNumber' | 'cost' | 'notes'>;
+  insurance?: { startDate: string | null; endDate: string | null };
 
   /**
    * Optional: record the car's current technical inspection.
    * Omit entirely if the user skips this step.
    */
-  inspection?: Pick<InspectionHistory, 'startDate' | 'endDate' | 'center' | 'cost' | 'notes'>;
+  inspection?: { startDate: string | null; endDate: string | null };
 }
 
 export interface AddCarResult {
@@ -60,11 +58,6 @@ export async function addCarWorkflow(input: AddCarInput): Promise<AddCarResult> 
         carId: newCar.id,
         startDate: input.insurance.startDate,
         endDate: input.insurance.endDate,
-        status: deriveStatus(input.insurance.endDate),
-        provider: input.insurance.provider,
-        policyNumber: input.insurance.policyNumber,
-        cost: input.insurance.cost,
-        notes: input.insurance.notes,
       });
     } catch (err) {
       // Non-fatal: log but continue — car was already saved
@@ -79,10 +72,6 @@ export async function addCarWorkflow(input: AddCarInput): Promise<AddCarResult> 
         carId: newCar.id,
         startDate: input.inspection.startDate,
         endDate: input.inspection.endDate,
-        status: deriveStatus(input.inspection.endDate),
-        center: input.inspection.center,
-        cost: input.inspection.cost,
-        notes: input.inspection.notes,
       });
     } catch (err) {
       console.error('[addCarWorkflow] Inspection insert failed:', err);
@@ -90,10 +79,4 @@ export async function addCarWorkflow(input: AddCarInput): Promise<AddCarResult> 
   }
 
   return result;
-}
-
-/** Derive a status string based on the end date relative to today. */
-function deriveStatus(endDate: string | null): 'active' | 'expired' | 'pending' {
-  if (!endDate) return 'pending';
-  return new Date(endDate) >= new Date() ? 'active' : 'expired';
 }

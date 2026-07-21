@@ -2,6 +2,16 @@ import { Hono } from "npm:hono";
 import { cors } from "npm:hono/cors";
 import { logger } from "npm:hono/logger";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  getInsuranceHistory,
+  createInsuranceHistory,
+  updateInsuranceHistory,
+  deleteInsuranceHistory,
+  getInspectionHistory,
+  createInspectionHistory,
+  updateInspectionHistory,
+  deleteInspectionHistory,
+} from "./insurance_inspection.tsx";
 
 const app = new Hono();
 
@@ -54,6 +64,23 @@ const verifyUser = async (authHeader: string | null) => {
   
   return { error: null, userId: user.id };
 };
+
+
+const withAuth = async (c: any, handler: (c: any, supabase: ReturnType<typeof getServiceClient>, userId: string) => Promise<Response>) => {
+  const { error: authError, userId } = await verifyUser(c.req.header('Authorization'));
+  if (authError || !userId) return c.json({ success: false, error: authError }, 401);
+  return handler(c, getServiceClient(), userId);
+};
+
+app.get("/make-server-cd2dec47/cars/:carId/insurance", (c) => withAuth(c, getInsuranceHistory));
+app.post("/make-server-cd2dec47/cars/:carId/insurance", (c) => withAuth(c, createInsuranceHistory));
+app.put("/make-server-cd2dec47/cars/:carId/insurance/:insuranceId", (c) => withAuth(c, updateInsuranceHistory));
+app.delete("/make-server-cd2dec47/cars/:carId/insurance/:insuranceId", (c) => withAuth(c, deleteInsuranceHistory));
+
+app.get("/make-server-cd2dec47/cars/:carId/inspections", (c) => withAuth(c, getInspectionHistory));
+app.post("/make-server-cd2dec47/cars/:carId/inspections", (c) => withAuth(c, createInspectionHistory));
+app.put("/make-server-cd2dec47/cars/:carId/inspections/:inspectionId", (c) => withAuth(c, updateInspectionHistory));
+app.delete("/make-server-cd2dec47/cars/:carId/inspections/:inspectionId", (c) => withAuth(c, deleteInspectionHistory));
 
 // Health check endpoint
 app.get("/make-server-cd2dec47/health", (c) => {
@@ -324,19 +351,21 @@ app.get("/make-server-cd2dec47/cars/:carId", async (c) => {
     
     // Get current insurance
     const { data: insurance } = await supabase
-      .from('insurance_records')
-      .select('*')
+      .from('insurance_histories')
+      .select('id, car_id, start_date, end_date, created_at, updated_at')
       .eq('car_id', carId)
-      .eq('is_current', true)
-      .single();
+      .order('end_date', { ascending: false, nullsFirst: false })
+      .limit(1)
+      .maybeSingle();
     
     // Get current technical inspection
     const { data: inspection } = await supabase
-      .from('technical_inspection_records')
-      .select('*')
+      .from('inspection_histories')
+      .select('id, car_id, start_date, end_date, created_at, updated_at')
       .eq('car_id', carId)
-      .eq('is_current', true)
-      .single();
+      .order('end_date', { ascending: false, nullsFirst: false })
+      .limit(1)
+      .maybeSingle();
     
     // Calculate days until expiry
     const insuranceWithDays = insurance ? {
@@ -346,7 +375,7 @@ app.get("/make-server-cd2dec47/cars/:carId", async (c) => {
     
     const inspectionWithDays = inspection ? {
       ...inspection,
-      daysUntilExpiry: Math.ceil((new Date(inspection.expiry_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)),
+      daysUntilExpiry: Math.ceil((new Date(inspection.end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)),
     } : null;
     
     return c.json({
@@ -662,19 +691,21 @@ app.get("/make-server-cd2dec47/dashboard", async (c) => {
       
       // Current insurance
       const { data: insurance } = await supabase
-        .from('insurance_records')
-        .select('*')
+        .from('insurance_histories')
+        .select('id, car_id, start_date, end_date, created_at, updated_at')
         .eq('car_id', car.id)
-        .eq('is_current', true)
-        .single();
+        .order('end_date', { ascending: false, nullsFirst: false })
+        .limit(1)
+        .maybeSingle();
       
       // Current technical inspection
       const { data: inspection } = await supabase
-        .from('technical_inspection_records')
-        .select('*')
+        .from('inspection_histories')
+        .select('id, car_id, start_date, end_date, created_at, updated_at')
         .eq('car_id', car.id)
-        .eq('is_current', true)
-        .single();
+        .order('end_date', { ascending: false, nullsFirst: false })
+        .limit(1)
+        .maybeSingle();
       
       const insuranceWithDays = insurance ? {
         endDate: insurance.end_date,
@@ -683,9 +714,9 @@ app.get("/make-server-cd2dec47/dashboard", async (c) => {
       } : null;
       
       const inspectionWithDays = inspection ? {
-        expiryDate: inspection.expiry_date,
-        daysUntilExpiry: Math.ceil((new Date(inspection.expiry_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)),
-        isExpiringSoon: Math.ceil((new Date(inspection.expiry_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) <= 30,
+        endDate: inspection.end_date,
+        daysUntilExpiry: Math.ceil((new Date(inspection.end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)),
+        isExpiringSoon: Math.ceil((new Date(inspection.end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) <= 30,
       } : null;
       
       return {
