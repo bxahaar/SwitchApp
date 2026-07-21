@@ -5,8 +5,8 @@ import { supabase } from '../supabase';
 export interface InsuranceHistory {
   id: string;
   carId: string;
-  fromDate: string | null;
-  toDate: string | null;
+  startDate: string | null;
+  endDate: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -14,8 +14,8 @@ export interface InsuranceHistory {
 type InsuranceRow = {
   id: string;
   car_id: string;
-  from_date: string | null;
-  to_date: string | null;
+  start_date: string | null;
+  end_date: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -24,8 +24,8 @@ function rowToInsurance(row: InsuranceRow): InsuranceHistory {
   return {
     id: row.id,
     carId: row.car_id,
-    startDate: row.from_date,
-    endDate: row.to_date,
+    startDate: row.start_date,
+    endDate: row.end_date,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -35,7 +35,7 @@ export const insuranceHistoriesService = {
   async listByCar(carId: string): Promise<InsuranceHistory[]> {
     const { data, error } = await supabase
       .from('insurance_histories')
-      .select('id, car_id, from_date, to_date, created_at, updated_at')
+      .select('id, car_id, start_date, end_date, created_at, updated_at')
       .eq('car_id', carId)
       .order('created_at', { ascending: false });
 
@@ -49,8 +49,8 @@ export const insuranceHistoriesService = {
   async create(record: Omit<InsuranceHistory, 'id' | 'createdAt'>): Promise<void> {
     const { error } = await supabase.from('insurance_histories').insert({
       car_id: record.carId,
-      from_date: record.fromDate,
-      to_date: record.toDate
+      start_date: record.startDate,
+      end_date: record.endDate
     });
     if (error) {
       console.error('[insuranceHistories.create] error:', error.message, '| code:', error.code);
@@ -60,8 +60,8 @@ export const insuranceHistoriesService = {
 
   async update(id: string, record: Partial<Omit<InsuranceHistory, 'id' | 'carId' | 'createdAt'>>): Promise<void> {
     const payload: Record<string, unknown> = {};
-    if (record.fromDate !== undefined) payload.start_date = record.fromDate;
-    if (record.toDate !== undefined) payload.end_date = record.toDate;
+    if (record.startDate !== undefined) payload.start_date = record.startDate;
+    if (record.endDate !== undefined) payload.end_date = record.endDate;
 
     if (Object.keys(payload).length === 0) return;
     const { error } = await supabase.from('insurance_histories').update(payload).eq('id', id);
