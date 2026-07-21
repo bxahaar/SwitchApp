@@ -30,6 +30,7 @@ export interface Service {
   cost: number;
   notes: string;
   serviceItems?: string[];
+  serviceItemLabels?: Record<string, string>;
   nextServiceType?: 'date' | 'mileage';
   nextServiceValue?: string | number;
   reminderNote?: string;
