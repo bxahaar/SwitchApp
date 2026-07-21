@@ -46,7 +46,7 @@ export const insuranceHistoriesService = {
     return (data ?? []).map((r) => rowToInsurance(r as InsuranceRow));
   },
 
-  async create(record: Omit<InsuranceHistory, 'id' | 'createdAt'>): Promise<void> {
+  async create(record: Omit<InsuranceHistory, 'id' | 'createdAt' | 'updatedAt'>): Promise<void> {
     const { error } = await supabase.from('insurance_histories').insert({
       car_id: record.carId,
       start_date: record.startDate,
