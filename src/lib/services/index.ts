@@ -14,4 +14,3 @@ export { inspectionHistoriesService } from './inspection-histories';
 export type { InspectionHistory } from './inspection-histories';
 export { insuranceHistoriesService } from './insurance-histories';
 export type { InsuranceHistory } from './insurance-histories';
-export { TYPE_TO_CATEGORY_ID, typeToCategory, categoryToType } from './categories';

@@ -1,5 +1,4 @@
 import { supabase } from '../supabase';
-import { typeToCategory, categoryToType } from './categories';
 import type { Service } from './types';
 import { serviceItemsService } from './service-items';
 
@@ -16,6 +15,7 @@ type ServiceRow = {
 interface ServiceMeta {
   notes?: string;
   type?: Service['type'];
+  typeName?: string;
   nextServiceType?: 'date' | 'mileage';
   nextServiceValue?: string | number;
   reminderNote?: string;
@@ -34,6 +34,7 @@ function buildMeta(service: Omit<Service, 'id'>): ServiceMeta {
   return {
     notes: service.notes,
     type: service.type,
+    typeName: service.typeName,
     nextServiceType: service.nextServiceType,
     nextServiceValue: service.nextServiceValue,
     reminderNote: service.reminderNote,
@@ -46,6 +47,7 @@ function rowToService(row: ServiceRow): Service {
     id: row.id,
     carId: row.car_id,
     type: meta.type ?? 'general',
+    typeName: meta.typeName,
     date: row.date ?? '',
     mileage: row.kilometer ?? 0,
     cost: row.cost ?? 0,
@@ -90,11 +92,10 @@ export const servicesService = {
         const items = byService.get(svc.id);
         svc.serviceItems = items?.ids ?? [];
         svc.serviceItemLabels = items?.labels ?? {};
-        const rootItemId = typeToCategory(svc.type);
-        if (svc.type === 'general' && svc.serviceItems.length > 0) {
-          // Legacy rows may not have stored a type in description. Infer it from the first selected child.
+        if ((!svc.type || svc.type === 'general') && svc.serviceItems.length > 0) {
+          // Older rows may not have stored a parent item id in description. Infer it from the first selected child.
           const first = junctionRows.find((row) => row.serviceId === svc.id && row.itemId === svc.serviceItems?.[0]);
-          svc.type = categoryToType(first?.parentId ?? rootItemId);
+          svc.type = first?.parentId ?? svc.type;
         }
       }
     }

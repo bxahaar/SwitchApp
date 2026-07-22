@@ -26,7 +26,7 @@ export const ServiceHistorySheet: React.FC<ServiceHistorySheetProps> = ({ childr
   const handleExport = () => {
     // Mock export functionality
     const data = filteredServices.map(s => ({
-      type: t(s.type),
+      type: (s.typeName || t(s.type)),
       date: s.date,
       mileage: s.mileage,
       cost: s.cost,

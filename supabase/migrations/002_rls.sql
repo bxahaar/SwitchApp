@@ -239,27 +239,3 @@ CREATE POLICY "insurance_histories_update_own" ON public.insurance_histories
 CREATE POLICY "insurance_histories_delete_own" ON public.insurance_histories
   FOR DELETE TO authenticated
   USING (car_id IN (SELECT id FROM public.cars WHERE user_id = auth.uid()));
-
--- ─────────────────────────────────────────────────────────────────────────────
--- CATEGORIES (legacy — same rules as items)
--- ─────────────────────────────────────────────────────────────────────────────
-ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "categories_select"     ON public.categories;
-DROP POLICY IF EXISTS "categories_insert_own" ON public.categories;
-DROP POLICY IF EXISTS "categories_update_own" ON public.categories;
-DROP POLICY IF EXISTS "categories_delete_own" ON public.categories;
-
-CREATE POLICY "categories_select" ON public.categories
-  FOR SELECT TO authenticated
-  USING (user_id IS NULL OR user_id = auth.uid());
-
-CREATE POLICY "categories_insert_own" ON public.categories
-  FOR INSERT TO authenticated WITH CHECK (user_id = auth.uid());
-
-CREATE POLICY "categories_update_own" ON public.categories
-  FOR UPDATE TO authenticated
-  USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
-
-CREATE POLICY "categories_delete_own" ON public.categories
-  FOR DELETE TO authenticated USING (user_id = auth.uid());

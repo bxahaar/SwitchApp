@@ -1,12 +1,6 @@
 // Domain types shared across the Supabase service layer and the React contexts.
 
-export type ServiceType =
-  | 'engine'
-  | 'gearbox'
-  | 'brakes'
-  | 'tires'
-  | 'battery'
-  | 'general';
+export type ServiceType = string;
 
 export interface Car {
   id: string;
@@ -25,6 +19,7 @@ export interface Service {
   id: string;
   carId: string;
   type: ServiceType;
+  typeName?: string;
   date: string;
   mileage: number;
   cost: number;
@@ -40,6 +35,7 @@ export interface Reminder {
   id: string;
   carId: string;
   type: ServiceType;
+  typeName?: string;
   reminderType: 'date' | 'mileage';
   reminderValue: string | number;
   reminderNote?: string;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp, Service } from '../context/AppContext';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -6,10 +6,10 @@ import { NumericInput } from './ui/numeric-input';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { toast } from 'sonner';
-import { ChevronLeft, CircleCheck, Check, Plus } from 'lucide-react';
+import { ChevronLeft, CircleCheck, Check, Edit2, Plus, Trash2 } from 'lucide-react';
 import { DatePickerInput } from './ui/date-picker';
 import { motion, AnimatePresence } from 'motion/react';
-import { itemsService, type Item, typeToCategory } from '../../lib/services';
+import { itemsService, type Item } from '../../lib/services';
 
 interface AddServiceProps {
   onSuccess?: () => void;
@@ -22,7 +22,9 @@ export const AddService: React.FC<AddServiceProps> = ({ onSuccess, reminderServi
   const [step, setStep] = useState(1);
   const [showSuccess, setShowSuccess] = useState(false);
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  const [rootItems, setRootItems] = useState<Item[]>([]);
   const [categoryItems, setCategoryItems] = useState<Item[]>([]);
+  const [rootsLoading, setRootsLoading] = useState(false);
   const [itemsLoading, setItemsLoading] = useState(false);
   const [customItem, setCustomItem] = useState('');
   const [showCustomInput, setShowCustomInput] = useState(false);
@@ -40,15 +42,40 @@ export const AddService: React.FC<AddServiceProps> = ({ onSuccess, reminderServi
     reminderNote: '',
   }));
 
-  const serviceTypes: Service['type'][] = ['engine', 'gearbox', 'brakes', 'tires', 'battery', 'general'];
+  const selectedParentId = formData.type || rootItems[0]?.id || '';
 
-  const selectedParentId = useMemo(() => typeToCategory(formData.type || 'general'), [formData.type]);
+  useEffect(() => {
+    let cancelled = false;
+    const loadRoots = async () => {
+      setRootsLoading(true);
+      try {
+        const roots = await itemsService.listRoots();
+        if (cancelled) return;
+        setRootItems(roots);
+        setFormData((prev) => {
+          if (prev.type && roots.some((root) => root.id === prev.type)) return prev;
+          return { ...prev, type: roots[0]?.id || '' };
+        });
+      } catch {
+        if (!cancelled) setRootItems([]);
+        toast.error('Failed to load service categories. Please try again.');
+      } finally {
+        if (!cancelled) setRootsLoading(false);
+      }
+    };
+    loadRoots();
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
     const loadItems = async () => {
       setItemsLoading(true);
       try {
+        if (!selectedParentId) {
+          if (!cancelled) setCategoryItems([]);
+          return;
+        }
         const items = await itemsService.listChildren(selectedParentId);
         if (!cancelled) setCategoryItems(items);
       } catch {
@@ -136,7 +163,7 @@ export const AddService: React.FC<AddServiceProps> = ({ onSuccess, reminderServi
       return;
     }
     try {
-      const createdItem = await itemsService.create({ name, nameFa: null, parentId: selectedParentId });
+      const createdItem = await itemsService.create({ name, parentId: selectedParentId });
       setCategoryItems(prev => [...prev, createdItem]);
       setSelectedItems(prev => prev.includes(createdItem.id) ? prev : [...prev, createdItem.id]);
       setCustomItem('');
@@ -146,9 +173,33 @@ export const AddService: React.FC<AddServiceProps> = ({ onSuccess, reminderServi
     }
   };
 
+  const editCustomServiceItem = async (item: Item) => {
+    if (item.userId === null) return;
+    const name = window.prompt(language === 'fa' ? 'نام مورد سفارشی' : 'Custom item name', item.name)?.trim();
+    if (!name || name === item.name) return;
+    try {
+      const updated = await itemsService.update(item.id, { name });
+      setCategoryItems((prev) => prev.map((current) => (current.id === item.id ? updated : current)));
+    } catch {
+      toast.error('Failed to update custom item. Please try again.');
+    }
+  };
+
+  const deleteCustomServiceItem = async (item: Item) => {
+    if (item.userId === null) return;
+    if (!window.confirm(language === 'fa' ? 'این مورد حذف شود؟' : 'Delete this custom item?')) return;
+    try {
+      await itemsService.remove(item.id);
+      setCategoryItems((prev) => prev.filter((current) => current.id !== item.id));
+      setSelectedItems((prev) => prev.filter((id) => id !== item.id));
+    } catch {
+      toast.error('Failed to delete custom item. Please try again.');
+    }
+  };
+
   const resetForm = () => {
     setFormData({
-      carId: '', type: 'general',
+      carId: '', type: rootItems[0]?.id || '',
       date: new Date().toISOString().split('T')[0],
       mileage: 0, cost: 0, notes: '',
       serviceItems: [], nextServiceType: undefined,
@@ -158,6 +209,8 @@ export const AddService: React.FC<AddServiceProps> = ({ onSuccess, reminderServi
     setMode('completed');
   };
 
+  const selectedParentName = rootItems.find((root) => root.id === selectedParentId)?.name;
+
   const handleSubmit = async () => {
     if (!formData.carId || !formData.type) {
       toast.error('Please fill in all required fields');
@@ -166,9 +219,9 @@ export const AddService: React.FC<AddServiceProps> = ({ onSuccess, reminderServi
 
     try {
       if (editingServiceId) {
-        await updateService(editingServiceId, { ...formData, serviceItems: Array.from(new Set(selectedItems)) } as Omit<Service, 'id'>);
+        await updateService(editingServiceId, { ...formData, type: selectedParentId, typeName: selectedParentName, serviceItems: Array.from(new Set(selectedItems)) } as Omit<Service, 'id'>);
       } else {
-        await addService({ ...formData, serviceItems: Array.from(new Set(selectedItems)) } as Omit<Service, 'id'>);
+        await addService({ ...formData, type: selectedParentId, typeName: selectedParentName, serviceItems: Array.from(new Set(selectedItems)) } as Omit<Service, 'id'>);
       }
       setShowSuccess(true);
       setTimeout(() => {
@@ -190,7 +243,7 @@ export const AddService: React.FC<AddServiceProps> = ({ onSuccess, reminderServi
     try {
       await addReminder({
         carId: formData.carId!,
-        type: formData.type!,
+        type: selectedParentId,
         reminderType: formData.nextServiceType!,
         reminderValue: formData.nextServiceValue!,
         reminderNote: formData.reminderNote || '',
@@ -315,17 +368,22 @@ export const AddService: React.FC<AddServiceProps> = ({ onSuccess, reminderServi
               <div>
                 <Label>{t('selectServiceType')}</Label>
                 <div className="grid grid-cols-2 gap-3 mt-2">
-                  {serviceTypes.map(type => (
+                  {rootsLoading && (
+                    <div className="col-span-2 p-4 rounded-xl bg-secondary text-sm text-muted-foreground">
+                      {language === 'fa' ? 'در حال بارگذاری...' : 'Loading service categories...'}
+                    </div>
+                  )}
+                  {rootItems.map((root) => (
                     <button
-                      key={type}
-                      onClick={() => setFormData({ ...formData, type })}
+                      key={root.id}
+                      onClick={() => setFormData({ ...formData, type: root.id })}
                       className={`py-3 px-4 rounded-xl border transition-all ${
-                        formData.type === type
+                        selectedParentId === root.id
                           ? 'bg-primary text-primary-foreground border-primary'
                           : 'bg-secondary border-border/70 text-foreground hover:border-primary/50'
                       }`}
                     >
-                      {t(type)}
+                      {root.name}
                     </button>
                   ))}
                 </div>
@@ -333,7 +391,7 @@ export const AddService: React.FC<AddServiceProps> = ({ onSuccess, reminderServi
 
               <Button
                 onClick={() => setStep(3)}
-                disabled={!formData.carId}
+                disabled={!formData.carId || !selectedParentId}
                 className="w-full bg-primary hover:bg-primary/90"
               >
                 {t('nextStep')}
@@ -452,7 +510,17 @@ export const AddService: React.FC<AddServiceProps> = ({ onSuccess, reminderServi
                       }`}>
                         {isSelected && <Check className="h-3 w-3 text-primary-foreground" strokeWidth={3} />}
                       </div>
-                      <span className="flex-1 text-start">{language === 'fa' ? (item.nameFa || item.name) : item.name}</span>
+                      <span className="flex-1 text-start">{item.name}</span>
+                      {item.userId && (
+                        <span className="flex items-center gap-1" onClick={(event) => event.stopPropagation()}>
+                          <button type="button" onClick={() => editCustomServiceItem(item)} className="p-1 rounded hover:bg-accent" aria-label={language === 'fa' ? 'ویرایش' : 'Edit'}>
+                            <Edit2 className="h-4 w-4" />
+                          </button>
+                          <button type="button" onClick={() => deleteCustomServiceItem(item)} className="p-1 rounded hover:bg-accent" aria-label={language === 'fa' ? 'حذف' : 'Delete'}>
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </span>
+                      )}
                     </button>
                   );
                 })}

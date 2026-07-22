@@ -274,7 +274,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, onStartService
                                   <div className="h-2 w-2 rounded-full bg-primary" />
                                 </div>
                                 <div className="flex-1">
-                                  <h4 className="text-card-foreground">{t(item.type)}</h4>
+                                  <h4 className="text-card-foreground">{(item.typeName || t(item.type))}</h4>
                                   <p className="text-sm text-muted-foreground">
                                     {item.nextServiceType === 'mileage' 
                                       ? `${t('at')} ${item.nextServiceValue?.toLocaleString()} ${t('km')}`
