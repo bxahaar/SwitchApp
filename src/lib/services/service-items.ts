@@ -11,7 +11,7 @@ export interface ServiceItem {
 type ServiceItemRow = {
   service_id: string;
   item_id: string;
-  items?: { name: string; name_fa: string | null; parent_id: string | null } | null;
+  items?: { name: string; parent_id: string | null } | null;
 };
 
 function rowToServiceItem(row: ServiceItemRow): ServiceItem {
@@ -27,7 +27,7 @@ export const serviceItemsService = {
   async listByService(serviceId: string): Promise<ServiceItem[]> {
     const { data, error } = await supabase
       .from('service_items')
-      .select('service_id, item_id, items(name, name_fa, parent_id)')
+      .select('service_id, item_id, items(name, parent_id)')
       .eq('service_id', serviceId);
 
     if (error) {
@@ -41,7 +41,7 @@ export const serviceItemsService = {
     if (serviceIds.length === 0) return [];
     const { data, error } = await supabase
       .from('service_items')
-      .select('service_id, item_id, items(name, name_fa, parent_id)')
+      .select('service_id, item_id, items(name, parent_id)')
       .in('service_id', serviceIds);
 
     if (error) {

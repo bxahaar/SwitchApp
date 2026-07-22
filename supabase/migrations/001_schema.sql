@@ -41,11 +41,10 @@ CREATE INDEX IF NOT EXISTS cars_user_id_idx ON public.cars (user_id);
 CREATE TABLE IF NOT EXISTS public.items (
   id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
   name        text        NOT NULL,
-  name_fa     text,                                        -- Persian name
   parent_id   uuid        REFERENCES public.items(id) ON DELETE SET NULL,
   user_id     uuid        REFERENCES auth.users(id) ON DELETE CASCADE,
-  sort_order  integer     NOT NULL DEFAULT 0,
-  created_at  timestamptz NOT NULL DEFAULT now()
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  updated_at  timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS items_parent_id_idx ON public.items (parent_id);
@@ -54,16 +53,12 @@ CREATE INDEX IF NOT EXISTS items_user_id_idx   ON public.items (user_id);
 -- ─────────────────────────────────────────────────────────────────────────────
 -- SERVICES
 -- A completed service record for a car.
--- item_id → root item = the service type (engine / brakes / etc.)
--- Extra fields (mileage, notes) are stored in the description JSON blob for now.
 -- ─────────────────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.services (
   id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
   car_id      uuid        NOT NULL REFERENCES public.cars(id) ON DELETE CASCADE,
-  item_id     uuid        REFERENCES public.items(id),    -- service type (root item)
-  -- legacy column kept for backward compatibility during transition
-  category_id uuid,
   date        date,
+  kilometer   numeric(15,0),
   cost        numeric(15,0),
   description text,                                        -- JSON meta blob
   created_at  timestamptz NOT NULL DEFAULT now(),
@@ -78,13 +73,9 @@ CREATE INDEX IF NOT EXISTS services_date_idx    ON public.services (date DESC);
 -- Records which specific items were replaced/serviced in a service visit.
 -- ─────────────────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.service_items (
-  id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
   service_id  uuid        NOT NULL REFERENCES public.services(id) ON DELETE CASCADE,
   item_id     uuid        NOT NULL REFERENCES public.items(id),
-  quantity    integer     NOT NULL DEFAULT 1,
-  cost        numeric(15,0),                               -- item-level cost override
-  notes       text,
-  created_at  timestamptz NOT NULL DEFAULT now()
+  PRIMARY KEY (service_id, item_id)
 );
 
 CREATE INDEX IF NOT EXISTS service_items_service_id_idx ON public.service_items (service_id);
@@ -93,13 +84,10 @@ CREATE INDEX IF NOT EXISTS service_items_item_id_idx    ON public.service_items 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- REMINDERS
 -- A pending service reminder (not yet completed).
--- item_id → root item = the reminder type (engine / brakes / etc.)
 -- ─────────────────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.reminders (
   id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
   car_id      uuid        NOT NULL REFERENCES public.cars(id) ON DELETE CASCADE,
-  item_id     uuid        REFERENCES public.items(id),
-  -- legacy column kept for backward compatibility
   category_id uuid,
   description text,                                        -- JSON meta blob
   created_at  timestamptz NOT NULL DEFAULT now(),
@@ -146,15 +134,3 @@ CREATE TABLE IF NOT EXISTS public.insurance_histories (
 );
 
 CREATE INDEX IF NOT EXISTS insurance_histories_car_id_idx ON public.insurance_histories (car_id);
-
--- ─────────────────────────────────────────────────────────────────────────────
--- BACKWARD COMPAT: keep categories table for existing data
--- New code writes to items; old data remains in categories.
--- ─────────────────────────────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS public.categories (
-  id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
-  name        text        NOT NULL,
-  parent_id   uuid        REFERENCES public.categories(id),
-  user_id     uuid        REFERENCES auth.users(id) ON DELETE CASCADE,
-  created_at  timestamptz NOT NULL DEFAULT now()
-);

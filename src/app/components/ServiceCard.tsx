@@ -18,7 +18,7 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({ service, onEdit }) => 
         <AccordionItem value="item-1" className="border-none">
           <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-secondary/70 transition-colors">
             <div className="flex items-center justify-between w-full pr-2">
-              <h4 className="text-card-foreground font-medium">{t(service.type)}</h4>
+              <h4 className="text-card-foreground font-medium">{(service.typeName || t(service.type))}</h4>
               <div className="flex items-center gap-1 text-sm text-muted-foreground">
                 <Gauge className="h-4 w-4" />
                 <span>{service.mileage.toLocaleString()} {t('km')}</span>

@@ -1,5 +1,4 @@
 import { supabase } from '../supabase';
-import { typeToCategory, categoryToType } from './categories';
 import type { Reminder } from './types';
 
 // public.reminders columns: id, car_id, category_id, description, created_at
@@ -31,7 +30,7 @@ function rowToReminder(row: ReminderRow): Reminder {
   return {
     id: row.id,
     carId: row.car_id,
-    type: categoryToType(row.category_id),
+    type: row.category_id,
     reminderType: meta.reminderType ?? 'date',
     reminderValue: meta.reminderValue ?? '',
     reminderNote: meta.reminderNote,
@@ -62,7 +61,7 @@ export const remindersService = {
     };
     const { error } = await supabase.from('reminders').insert({
       car_id: reminder.carId,
-      category_id: typeToCategory(reminder.type),
+      category_id: reminder.type,
       description: JSON.stringify(meta),
     });
     if (error) {
