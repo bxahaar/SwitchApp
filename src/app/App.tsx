@@ -16,7 +16,7 @@ type Tab = 'dashboard' | 'addService' | 'cars' | 'insights';
 
 const AppContent: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
-  const [reminderServiceId, setReminderServiceId] = useState<string | null>(null);
+  const [reminderId, setReminderId] = useState<string | null>(null);
   const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
   const { t, language } = useApp();
   const { isAuthenticated, showSplash } = useAuth();
@@ -28,8 +28,8 @@ const AppContent: React.FC = () => {
    // { id: 'insights' as Tab, label: t('insights'), icon: Lightbulb },
   ];
 
-  const handleStartServiceWithReminder = (serviceId: string) => {
-    setReminderServiceId(serviceId);
+  const handleStartServiceWithReminder = (reminderId: string) => {
+    setReminderId(reminderId);
     setActiveTab('addService');
   };
 
@@ -39,7 +39,7 @@ const AppContent: React.FC = () => {
   };
 
   const handleServiceSuccess = () => {
-    setReminderServiceId(null);
+    setReminderId(null);
     setEditingServiceId(null);
     setActiveTab('dashboard');
   };
@@ -110,7 +110,7 @@ const AppContent: React.FC = () => {
               >
                 <AddService 
                   onSuccess={handleServiceSuccess}
-                  reminderServiceId={reminderServiceId}
+                  reminderId={reminderId}
                   editingServiceId={editingServiceId}
                 />
               </motion.div>

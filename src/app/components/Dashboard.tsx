@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { CarCard } from './CarCard';
@@ -9,6 +9,11 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTr
 import { Switch } from './ui/switch';
 import { Label } from './ui/label';
 import { Button } from './ui/button';
+import { NumericInput } from './ui/numeric-input';
+import { Textarea } from './ui/textarea';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
+import { DatePickerInput } from './ui/date-picker';
+import { itemsService, type Item } from '../../lib/services';
 import { ServiceHistorySheet } from './ServiceHistorySheet';
 import { formatDate } from '../utils/dateFormatter';
 import { Timeline } from './Timeline';
@@ -24,7 +29,7 @@ interface DashboardProps {
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, onStartServiceWithReminder, onEditService }) => {
-  const { t, cars, services, theme, setTheme, language, setLanguage, deleteService, reminders, deleteReminder } = useApp();
+  const { t, cars, services, theme, setTheme, language, setLanguage, reminders, deleteReminder, updateReminder } = useApp();
   const { logout, user } = useAuth();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [privacyOpen, setPrivacyOpen] = useState(false);
@@ -32,6 +37,40 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, onStartService
   const [selectedCarId, setSelectedCarId] = useState<string | null>(
     cars.length > 0 ? cars[0].id : null
   );
+  const [rootItems, setRootItems] = useState<Item[]>([]);
+  const [editingReminderId, setEditingReminderId] = useState<string | null>(null);
+  const editingReminder = reminders.find((r) => r.id === editingReminderId);
+  const [editForm, setEditForm] = useState({ carId: '', type: '', reminderType: 'date' as 'date' | 'mileage', reminderValue: '' as string | number, reminderNote: '' });
+
+
+  useEffect(() => {
+    itemsService.listRoots().then(setRootItems).catch(() => toast.error('Failed to load service categories.'));
+  }, []);
+
+  useEffect(() => {
+    if (!editingReminder) return;
+    setEditForm({
+      carId: editingReminder.carId,
+      type: editingReminder.type,
+      reminderType: editingReminder.reminderType,
+      reminderValue: editingReminder.reminderValue,
+      reminderNote: editingReminder.reminderNote || '',
+    });
+  }, [editingReminder]);
+
+  const saveReminderEdit = async () => {
+    if (!editingReminderId || !editForm.carId || !editForm.type || !editForm.reminderValue) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+    try {
+      const typeName = rootItems.find((root) => root.id === editForm.type)?.name;
+      await updateReminder(editingReminderId, { ...editForm, typeName });
+      setEditingReminderId(null);
+    } catch {
+      toast.error('Failed to update reminder. Please try again.');
+    }
+  };
 
   // Update selected car when cars change
   React.useEffect(() => {
@@ -54,18 +93,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, onStartService
     ? reminders.filter(r => r.carId === selectedCarId)
     : reminders;
 
-  // Calculate upcoming services for selected car (from services with reminders)
-  const upcomingServicesFromHistory = filteredServices.filter(s => s.nextServiceType && s.nextServiceValue);
-  
-  // Combine upcoming services from history and standalone reminders
   const allUpcomingItems = [
-    ...upcomingServicesFromHistory.map(s => ({ ...s, isStandaloneReminder: false })),
     ...filteredReminders.map(r => ({
       id: r.id,
       carId: r.carId,
       type: r.type,
       nextServiceType: r.reminderType,
       nextServiceValue: r.reminderValue,
+      typeName: r.typeName || rootItems.find((root) => root.id === r.type)?.name,
       reminderNote: r.reminderNote,
       isStandaloneReminder: true,
     }))
@@ -246,21 +281,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, onStartService
                         transition={{ duration: 0.3 }}
                       >
                         <SwipeableReminderCard
-                          service={item}
                           isOpen={openSwipeCardId === item.id}
                           onOpenChange={(open) => setOpenSwipeCardId(open ? item.id : null)}
                           onDelete={async () => {
                             try {
-                              if (item.isStandaloneReminder) {
-                                await deleteReminder(item.id);
-                              } else {
-                                await deleteService(item.id);
-                              }
+                              await deleteReminder(item.id);
                             } catch {
                               toast.error('Failed to delete. Please try again.');
                             }
                             setOpenSwipeCardId(null);
                           }}
+                          onEdit={() => setEditingReminderId(item.id)}
                           onDone={() => {
                             if (onStartServiceWithReminder) {
                               onStartServiceWithReminder(item.id);
@@ -343,6 +374,43 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, onStartService
           </section>
         </div>
       </div>
+
+      <Dialog open={!!editingReminderId} onOpenChange={(open) => !open && setEditingReminderId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{language === 'fa' ? 'ویرایش یادآور' : 'Edit reminder'}</DialogTitle>
+            <DialogDescription>{language === 'fa' ? 'جزئیات یادآور را به‌روزرسانی کنید.' : 'Update the reminder details.'}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="editReminderCar">{t('selectCar')}</Label>
+              <select id="editReminderCar" className="w-full mt-2 px-4 py-3 rounded-xl bg-secondary border border-border/70 text-foreground" value={editForm.carId} onChange={(e) => setEditForm({ ...editForm, carId: e.target.value })}>
+                {cars.map((car) => <option key={car.id} value={car.id}>{car.name} - {car.licensePlate}</option>)}
+              </select>
+            </div>
+            <div>
+              <Label>{t('selectServiceType')}</Label>
+              <select className="w-full mt-2 px-4 py-3 rounded-xl bg-secondary border border-border/70 text-foreground" value={editForm.type} onChange={(e) => setEditForm({ ...editForm, type: e.target.value })}>
+                {rootItems.map((root) => <option key={root.id} value={root.id}>{root.name}</option>)}
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Button variant={editForm.reminderType === 'date' ? 'default' : 'outline'} onClick={() => setEditForm({ ...editForm, reminderType: 'date', reminderValue: '' })}>{t('byDate')}</Button>
+              <Button variant={editForm.reminderType === 'mileage' ? 'default' : 'outline'} onClick={() => setEditForm({ ...editForm, reminderType: 'mileage', reminderValue: 0 })}>{t('byMileage')}</Button>
+            </div>
+            {editForm.reminderType === 'date' ? (
+              <DatePickerInput value={editForm.reminderValue as string} onChange={(date) => setEditForm({ ...editForm, reminderValue: date })} language={language} />
+            ) : (
+              <NumericInput value={editForm.reminderValue as number} onChange={(value) => setEditForm({ ...editForm, reminderValue: value })} />
+            )}
+            <Textarea value={editForm.reminderNote} onChange={(e) => setEditForm({ ...editForm, reminderNote: e.target.value })} placeholder={t('reminderNote')} />
+            <div className="flex gap-3">
+              <Button variant="outline" className="flex-1" onClick={() => setEditingReminderId(null)}>{t('cancel')}</Button>
+              <Button className="flex-1 bg-primary hover:bg-primary/90" onClick={saveReminderEdit}>{t('save')}</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

@@ -13,12 +13,12 @@ import { itemsService, type Item } from '../../lib/services';
 
 interface AddServiceProps {
   onSuccess?: () => void;
-  reminderServiceId?: string | null;
+  reminderId?: string | null;
   editingServiceId?: string | null;
 }
 
-export const AddService: React.FC<AddServiceProps> = ({ onSuccess, reminderServiceId, editingServiceId }) => {
-  const { t, cars, addService, updateService, addReminder, language, services } = useApp();
+export const AddService: React.FC<AddServiceProps> = ({ onSuccess, reminderId, editingServiceId }) => {
+  const { t, cars, addService, updateService, addReminder, deleteReminder, language, services, reminders } = useApp();
   const [step, setStep] = useState(1);
   const [showSuccess, setShowSuccess] = useState(false);
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
@@ -90,14 +90,14 @@ export const AddService: React.FC<AddServiceProps> = ({ onSuccess, reminderServi
   }, [selectedParentId]);
 
 
-  // Pre-fill data from reminder service
+  // Pre-fill data from a reminder and start at service item selection.
   useEffect(() => {
-    if (reminderServiceId) {
-      const reminderService = services.find(s => s.id === reminderServiceId);
-      if (reminderService) {
+    if (reminderId) {
+      const reminder = reminders.find(r => r.id === reminderId);
+      if (reminder) {
         setFormData({
-          carId: reminderService.carId,
-          type: reminderService.type,
+          carId: reminder.carId,
+          type: reminder.type,
           date: new Date().toISOString().split('T')[0],
           mileage: 0,
           cost: 0,
@@ -108,10 +108,10 @@ export const AddService: React.FC<AddServiceProps> = ({ onSuccess, reminderServi
           reminderNote: '',
         });
         setMode('completed');
-        setStep(3); // Skip mode selection and car/type (pre-filled)
+        setStep(3);
       }
     }
-  }, [reminderServiceId, services]);
+  }, [reminderId, reminders]);
 
   // Pre-fill data from editing service
   useEffect(() => {
@@ -211,17 +211,21 @@ export const AddService: React.FC<AddServiceProps> = ({ onSuccess, reminderServi
 
   const selectedParentName = rootItems.find((root) => root.id === selectedParentId)?.name;
 
-  const handleSubmit = async () => {
-    if (!formData.carId || !formData.type) {
+  const handleSubmit = async (overrides: Partial<Omit<Service, 'id'>> = {}) => {
+    const submissionData = { ...formData, ...overrides };
+    if (!submissionData.carId || !submissionData.type) {
       toast.error('Please fill in all required fields');
       return;
     }
 
     try {
       if (editingServiceId) {
-        await updateService(editingServiceId, { ...formData, type: selectedParentId, typeName: selectedParentName, serviceItems: Array.from(new Set(selectedItems)) } as Omit<Service, 'id'>);
+        await updateService(editingServiceId, { ...submissionData, type: selectedParentId, typeName: selectedParentName, serviceItems: Array.from(new Set(selectedItems)) } as Omit<Service, 'id'>);
       } else {
-        await addService({ ...formData, type: selectedParentId, typeName: selectedParentName, serviceItems: Array.from(new Set(selectedItems)) } as Omit<Service, 'id'>);
+        await addService({ ...submissionData, type: selectedParentId, typeName: selectedParentName, serviceItems: Array.from(new Set(selectedItems)) } as Omit<Service, 'id'>);
+        if (reminderId) {
+          await deleteReminder(reminderId);
+        }
       }
       setShowSuccess(true);
       setTimeout(() => {
@@ -282,7 +286,7 @@ export const AddService: React.FC<AddServiceProps> = ({ onSuccess, reminderServi
       <div className="flex-1 overflow-y-auto p-4 pb-24">
         <div className="max-w-md mx-auto space-y-6">
           {/* Step 1: Mode Selection (Only show when not editing/from reminder) */}
-          {step === 1 && !editingServiceId && !reminderServiceId && (
+          {step === 1 && !editingServiceId && !reminderId && (
             <div className="space-y-6">
               <div>
                 <h3 className="font-medium text-foreground mb-2">{language === 'fa' ? 'نوع ثبت' : 'Record Type'}</h3>
@@ -724,8 +728,7 @@ export const AddService: React.FC<AddServiceProps> = ({ onSuccess, reminderServi
               <div className="flex gap-3">
                 <Button
                   onClick={() => {
-                    setFormData({ ...formData, nextServiceType: undefined, nextServiceValue: undefined, reminderNote: '' });
-                    handleSubmit();
+                    handleSubmit({ nextServiceType: undefined, nextServiceValue: undefined, reminderNote: '' });
                   }}
                   variant="outline"
                   className="flex-1"
