@@ -42,6 +42,7 @@ interface AppContextType {
   // Reminders
   reminders: Reminder[];
   addReminder: (reminder: Omit<Reminder, 'id'>) => Promise<void>;
+  updateReminder: (id: string, reminder: Omit<Reminder, 'id'>) => Promise<void>;
   deleteReminder: (id: string) => Promise<void>;
   // Inspection histories
   inspectionHistories: InspectionHistory[];
@@ -349,9 +350,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addService = async (service: Omit<Service, 'id'>): Promise<void> => {
     if (isPreviewMode) {
       setServices((prev) => [{ ...service, id: previewId() }, ...prev]);
+      if (service.nextServiceType && service.nextServiceValue) {
+        setReminders((prev) => [{
+          id: previewId(),
+          carId: service.carId,
+          type: service.type,
+          typeName: service.typeName,
+          reminderType: service.nextServiceType,
+          reminderValue: service.nextServiceValue,
+          reminderNote: service.reminderNote,
+        }, ...prev]);
+      }
       return;
     }
     await servicesService.create(service);
+    if (service.nextServiceType && service.nextServiceValue) {
+      await remindersService.create({
+        carId: service.carId,
+        type: service.type,
+        typeName: service.typeName,
+        reminderType: service.nextServiceType,
+        reminderValue: service.nextServiceValue,
+        reminderNote: service.reminderNote || '',
+      });
+    }
     await loadServicesAndReminders(carIdsRef.current);
   };
 
@@ -381,6 +403,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
     await remindersService.create(reminder);
+    await loadServicesAndReminders(carIdsRef.current);
+  };
+
+  const updateReminder = async (id: string, reminder: Omit<Reminder, 'id'>): Promise<void> => {
+    if (isPreviewMode) {
+      setReminders((prev) => prev.map((r) => (r.id === id ? { ...reminder, id } : r)));
+      return;
+    }
+    await remindersService.update(id, reminder);
     await loadServicesAndReminders(carIdsRef.current);
   };
 
@@ -469,7 +500,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         theme, setTheme,
         cars, carsLoading, addCar, updateCar, deleteCar,
         services, servicesLoading, addService, updateService, deleteService,
-        reminders, addReminder, deleteReminder,
+        reminders, addReminder, updateReminder, deleteReminder,
         inspectionHistories, addInspectionHistory, updateInspectionHistory, deleteInspectionHistory,
         insuranceHistories, addInsuranceHistory, updateInsuranceHistory, deleteInsuranceHistory,
         t,

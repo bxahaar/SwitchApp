@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { motion, useMotionValue, useTransform, PanInfo } from 'motion/react';
-import { Trash2, CheckCircle2 } from 'lucide-react';
-import { useApp, Service } from '../context/AppContext';
+import { motion, useMotionValue, PanInfo } from 'motion/react';
+import { Edit2, Trash2, CheckCircle2 } from 'lucide-react';
+import { useApp } from '../context/AppContext';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,8 +14,8 @@ import {
 } from './ui/alert-dialog';
 
 interface SwipeableReminderCardProps {
-  service: Service;
   onDelete: () => void;
+  onEdit?: () => void;
   onDone: () => void;
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
@@ -23,8 +23,8 @@ interface SwipeableReminderCardProps {
 }
 
 export const SwipeableReminderCard: React.FC<SwipeableReminderCardProps> = ({
-  service,
   onDelete,
+  onEdit,
   onDone,
   isOpen,
   onOpenChange,
@@ -33,7 +33,6 @@ export const SwipeableReminderCard: React.FC<SwipeableReminderCardProps> = ({
   const { language } = useApp();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const x = useMotionValue(0);
-  const opacity = useTransform(x, [0, 100], [0, 1]);
 
   const handleDragEnd = (event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
     if (info.offset.x > 50) {
@@ -73,6 +72,14 @@ export const SwipeableReminderCard: React.FC<SwipeableReminderCardProps> = ({
           >
             <CheckCircle2 className="h-5 w-5" />
           </button>
+          {onEdit && (
+            <button
+              onClick={() => { onOpenChange(false); onEdit(); }}
+              className="h-12 w-12 bg-secondary text-secondary-foreground flex items-center justify-center rounded-xl transition-transform active:scale-95"
+            >
+              <Edit2 className="h-5 w-5" />
+            </button>
+          )}
           <button
             onClick={handleDelete}
             className="h-12 w-12 bg-destructive text-destructive-foreground flex items-center justify-center rounded-xl transition-transform active:scale-95"
@@ -85,11 +92,11 @@ export const SwipeableReminderCard: React.FC<SwipeableReminderCardProps> = ({
         <motion.div
           drag="x"
           dragDirectionLock
-          dragConstraints={{ left: 0, right: 120 }}
+          dragConstraints={{ left: 0, right: onEdit ? 180 : 120 }}
           dragElastic={0.1}
           onDragEnd={handleDragEnd}
           style={{ x }}
-          animate={{ x: isOpen ? 120 : 0 }}
+          animate={{ x: isOpen ? (onEdit ? 180 : 120) : 0 }}
           transition={{ type: 'spring', stiffness: 300, damping: 30 }}
           className="relative z-10 touch-pan-y"
         >
