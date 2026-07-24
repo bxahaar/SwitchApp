@@ -50,12 +50,12 @@ export const CarManagement: React.FC = () => {
     } catch (error) {
         if (error instanceof PlateAlreadyExistsError) {
             console.log('Plate already exists:', formData.licensePlate);
-            toast.success('Plate already exists');
+            toast.error('Plate already exists');
             return;
         }
 
         console.error('Failed to add car:', error);
-        toast.success('Failed to save a car!');
+        toast.error('Failed to save a car!');
 
         // Generic error
     } finally {
