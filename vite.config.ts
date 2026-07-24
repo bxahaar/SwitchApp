@@ -24,6 +24,13 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+  build: {
+    rollupOptions: {
+      output: {
+        assetFileNames: 'assets/[name][extname]',
+      },
+    },
+  },
   resolve: {
     alias: {
       // Alias @ to the src directory

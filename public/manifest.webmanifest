@@ -1,0 +1,23 @@
+{
+  "name": "SwitchApp",
+  "short_name": "SwitchApp",
+  "description": "Manage and track car services effortlessly with Switch app, designed for car owners to organize maintenance and service history.",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "fullscreen"],
+  "orientation": "portrait",
+  "dir": "rtl",
+  "lang": "fa-IR",
+  "theme_color": "#ffffff",
+  "background_color": "#ffffff",
+  "categories": ["utilities", "productivity"],
+  "icons": [
+    {
+      "src": "/assets/860f69764076966699956fe8200d107243ec80c2.png",
+      "sizes": "2048x2048",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
