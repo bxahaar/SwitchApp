@@ -9,6 +9,7 @@ import { SplashScreen } from './components/SplashScreen';
 import { PhoneLogin } from './components/PhoneLogin';
 import { LayoutDashboard, Plus, Car, Lightbulb } from 'lucide-react';
 import { Toaster } from './components/ui/sonner';
+import { PwaInstallGuide } from './components/PwaInstallGuide';
 import { motion, AnimatePresence } from 'motion/react';
 import { ThemeProvider } from '@figma/astraui';
 
@@ -73,15 +74,15 @@ const AppContent: React.FC = () => {
 
   // Show main app
   return (
-    <div className="flex items-center justify-center min-h-screen bg-secondary p-0 sm:p-6 transition-colors duration-300">
+    <div className="flex items-center justify-center min-h-dvh app-viewport bg-secondary p-0 sm:p-6 transition-colors duration-300">
       {/* MARKER-MAKE-KIT-INVOKED */}
       {/* MARKER-MAKE-KIT-DISCOVERY-READ */}
       {/* MARKER-MAKE-KIT-TOKENS-READ */}
       {/* MARKER-MAKE-KIT-FINAL-CHECK-READ */}
       {/* Mobile Container */}
-      <div className="relative w-full max-w-[480px] h-screen overflow-hidden bg-background/95 shadow-lg sm:rounded-[calc(var(--radius)+12px)] flex flex-col ring-1 ring-border/70 backdrop-blur-xl">
+      <div className="relative w-full max-w-[480px] h-full min-h-0 overflow-hidden bg-background/95 shadow-lg sm:rounded-[calc(var(--radius)+12px)] flex flex-col ring-1 ring-border/70 backdrop-blur-xl">
         {/* Content Area */}
-        <div className="flex-1 overflow-hidden bg-background">
+        <div className="min-h-0 flex-1 overflow-hidden bg-background">
           <AnimatePresence mode="wait">
             {activeTab === 'dashboard' && (
               <motion.div
@@ -143,7 +144,7 @@ const AppContent: React.FC = () => {
         </div>
 
         {/* Bottom Navigation */}
-        <div className="sticky bottom-0 z-20 bg-card/92 backdrop-blur-xl border-t border-border/70">
+        <div className="shrink-0 sticky bottom-0 z-20 bg-card/92 backdrop-blur-xl border-t border-border/70">
           <div className="grid grid-cols-3 items-center gap-1 px-2 pt-2 pb-2 safe-area-bottom">
             {tabs.map(tab => {
               const Icon = tab.icon;
@@ -171,6 +172,7 @@ const AppContent: React.FC = () => {
         </div>
       </div>
       
+      <PwaInstallGuide />
       <Toaster />
     </div>
   );
