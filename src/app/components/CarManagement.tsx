@@ -9,6 +9,7 @@ import { ValiditySection } from './ValiditySection';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from './ui/sheet';
 import { toast } from 'sonner';
 import { Pencil, Trash2, Plus } from 'lucide-react';
+import {PlateAlreadyExistsError} from "../error/PlateAlreadyExistsError";
 
 export const CarManagement: React.FC = () => {
   console.log('CarManagement rendered');
@@ -46,8 +47,17 @@ export const CarManagement: React.FC = () => {
       toast.success('Car added successfully!');
       setFormData({ name: '', licensePlate: '' });
       setIsAdding(false);
-    } catch {
-      toast.error('Failed to save car. Please try again.');
+    } catch (error) {
+        if (error instanceof PlateAlreadyExistsError) {
+            console.log('Plate already exists:', formData.licensePlate);
+            toast.error('Plate already exists');
+            return;
+        }
+
+        console.error('Failed to add car:', error);
+        toast.error('Failed to save a car!');
+
+        // Generic error
     } finally {
       setSaving(false);
     }
